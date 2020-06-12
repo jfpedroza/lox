@@ -1,5 +1,6 @@
 extern crate lox;
 
+use failure::{Error, Fallible, ResultExt};
 use lox::*;
 use rustyline::{config::Configurer, error::ReadlineError, Editor};
 use std::ffi::OsStr;
@@ -8,23 +9,32 @@ use std::path::Path;
 fn main() {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
 
-    if args.len() > 1 {
+    let res = if args.len() > 1 {
         eprintln!("Usage: lox [script]");
         std::process::exit(64);
     } else if args.len() == 1 {
-        run_file(&args[0]).unwrap();
+        run_file(&args[0])
     } else {
-        run_prompt();
+        run_prompt()
+    };
+
+    match res {
+        Ok(()) => {}
+        Err(err) => {
+            print_err(err);
+            std::process::exit(1);
+        }
     }
 }
 
-fn run_file(path: &OsStr) -> Result<(), std::io::Error> {
+fn run_file(path: &OsStr) -> Fallible<()> {
     let path = Path::new(path);
-    let content = std::fs::read_to_string(path)?;
-    Ok(run(&content))
+    let context = format!("Could not read '{}'", path.display());
+    let content = std::fs::read_to_string(path).context(context)?;
+    run(&content)
 }
 
-fn run_prompt() {
+fn run_prompt() -> Fallible<()> {
     let mut rl = Editor::<()>::new();
     rl.set_auto_add_history(true);
 
@@ -35,15 +45,26 @@ fn run_prompt() {
         match rl.readline("\x1b[1;34mlox\x1b[0m> ") {
             Ok(line) => {
                 if !line.is_empty() {
-                    run(&line);
+                    match run(&line) {
+                        Ok(()) => {}
+                        Err(err) => print_err(err),
+                    }
                 }
             }
             Err(ReadlineError::Interrupted) => {}
             Err(ReadlineError::Eof) => break,
-            Err(err) => {
-                eprintln!("Error: {:?}", err);
-                break;
-            }
+            Err(err) => return Err(err.into()),
         }
+    }
+
+    Ok(())
+}
+
+fn print_err(err: Error) {
+    let mut fail = err.as_fail();
+    eprintln!("{}", fail);
+    while let Some(cause) = fail.cause() {
+        eprintln!("> {}", cause);
+        fail = cause;
     }
 }
