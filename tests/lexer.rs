@@ -1,5 +1,5 @@
 use lox::lexer::{
-    Scanner, Token,
+    Literal, Scanner, Token,
     TokenKind::{self, *},
 };
 use lox::location::Location;
@@ -52,6 +52,20 @@ fn non_literal_token<'a>(kind: TokenKind, lexeme: &'a str, column: usize) -> Tok
     }
 }
 
+fn literal_token<'a>(
+    kind: TokenKind,
+    lexeme: &'a str,
+    literal: Literal,
+    column: usize,
+) -> Token<'a> {
+    Token {
+        kind,
+        lexeme,
+        literal: Some(literal),
+        location: Location::new(0, column),
+    }
+}
+
 #[test]
 fn test_single_token() {
     for (lexeme, kind) in &LEXEME_KINDS {
@@ -92,6 +106,37 @@ fn test_multiple_tokens() {
         non_literal_token(Greater, ">", 21),
         non_literal_token(GreaterEqual, ">=", 22),
         Token::eof(Location::new(0, 48)),
+    ];
+    assert_eq!(Ok(expected_tokens), tokens);
+}
+
+#[test]
+fn test_string() {
+    let input = r#""this is a string""#;
+    let tokens = Scanner::get_tokens(&input);
+    let expected_token = literal_token(
+        TokenKind::String,
+        &input,
+        Literal::string("this is a string"),
+        0,
+    );
+    assert_eq!(Ok(one_token(expected_token)), tokens);
+}
+
+#[test]
+fn test_string2() {
+    let input = r#"("this is a string")"#;
+    let tokens = Scanner::get_tokens(&input);
+    let expected_tokens = vec![
+        non_literal_token(LeftParen, "(", 0),
+        literal_token(
+            TokenKind::String,
+            r#""this is a string""#,
+            Literal::string("this is a string"),
+            1,
+        ),
+        non_literal_token(RightParen, ")", 19),
+        Token::eof(Location::new(0, 20)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }

@@ -88,10 +88,18 @@ pub struct Scanner<'a> {
 pub enum ScanningError {
     #[fail(display = "[{}] Unrecognized character '{}'", location, character)]
     UnrecognizedCharacter { character: char, location: Location },
+    #[fail(display = "[{}] Unterminated string ", location)]
+    UnterminatedString { location: Location },
 }
 
 type TokenRes<'a> = Result<Token<'a>, ScanningError>;
 type ScanningRes<'a> = Result<Vec<Token<'a>>, ScanningError>;
+
+impl Literal {
+    pub fn string(string: &str) -> Self {
+        Literal::String(String::from(string))
+    }
+}
 
 impl<'a> Token<'a> {
     pub fn eof(location: Location) -> Self {
@@ -210,6 +218,7 @@ impl<'a> Scanner<'a> {
                     Some(self.create_token(Slash))
                 }
             }
+            '"' => Some(self.recognize_string()?),
             character => return Err(unrecognized_character(&self, character)),
         };
 
@@ -254,6 +263,31 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn recognize_string(&mut self) -> TokenRes<'a> {
+        // TODO: Accept escaping sequences
+        while let Some(character) = self.peek() {
+            match character {
+                '"' => break,
+                '\n' => {
+                    self.advance();
+                    self.current_location.new_line();
+                }
+                _ => {
+                    self.advance();
+                }
+            }
+        }
+
+        if self.is_at_end() {
+            return Err(unterminated_string(&self));
+        }
+
+        self.advance();
+
+        let value = Literal::string(&self.input[self.start + 1..self.current - 1]);
+        Ok(self.create_literal_token(TokenKind::String, value))
+    }
+
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
         Token {
             kind,
@@ -262,11 +296,26 @@ impl<'a> Scanner<'a> {
             location: self.start_location,
         }
     }
+
+    fn create_literal_token(&self, kind: TokenKind, literal: Literal) -> Token<'a> {
+        Token {
+            kind,
+            lexeme: &self.input[self.start..self.current],
+            literal: Some(literal),
+            location: self.start_location,
+        }
+    }
 }
 
 fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
     ScanningError::UnrecognizedCharacter {
         character,
+        location: scanner.current_location,
+    }
+}
+
+fn unterminated_string(scanner: &Scanner) -> ScanningError {
+    ScanningError::UnterminatedString {
         location: scanner.current_location,
     }
 }
