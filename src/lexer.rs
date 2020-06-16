@@ -77,7 +77,7 @@ pub struct Token<'a> {
 
 pub struct Scanner<'a> {
     input: &'a str,
-    iter: std::iter::Peekable<std::str::Chars<'a>>,
+    chars: std::str::Chars<'a>,
     start: usize,
     current: usize,
     start_location: Location,
@@ -122,7 +122,7 @@ impl<'a> Scanner<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             input,
-            iter: input.chars().peekable(),
+            chars: input.chars(),
             start: 0,
             current: 0,
             start_location: Default::default(),
@@ -246,17 +246,20 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) -> Option<char> {
         self.current += 1;
         self.current_location.advance();
-        self.iter.next()
+        self.chars.next()
     }
 
-    fn peek(&mut self) -> Option<char> {
-        self.iter.peek().cloned()
+    fn peek(&self) -> Option<char> {
+        self.chars.clone().nth(0)
+    }
+
+    fn peek_next(&self) -> Option<char> {
+        self.chars.clone().nth(1)
     }
 
     fn matches(&mut self, expected: char) -> bool {
-        if self.iter.next_if_eq(&expected).is_some() {
-            self.current += 1;
-            self.current_location.advance();
+        if self.peek() == Some(expected) {
+            self.advance();
             true
         } else {
             false
@@ -264,10 +267,13 @@ impl<'a> Scanner<'a> {
     }
 
     fn recognize_string(&mut self) -> TokenRes<'a> {
-        // TODO: Accept escaping sequences
         while let Some(character) = self.peek() {
             match character {
                 '"' => break,
+                '\\' => {
+                    self.advance();
+                    self.advance();
+                }
                 '\n' => {
                     self.advance();
                     self.current_location.new_line();
@@ -284,8 +290,9 @@ impl<'a> Scanner<'a> {
 
         self.advance();
 
-        let value = Literal::string(&self.input[self.start + 1..self.current - 1]);
-        Ok(self.create_literal_token(TokenKind::String, value))
+        let value = unescape_string(&self.input[self.start + 1..self.current - 1]);
+        let literal = Literal::string(&value);
+        Ok(self.create_literal_token(TokenKind::String, literal))
     }
 
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
@@ -318,4 +325,26 @@ fn unterminated_string(scanner: &Scanner) -> ScanningError {
     ScanningError::UnterminatedString {
         location: scanner.current_location,
     }
+}
+
+fn unescape_string(input: &str) -> String {
+    let mut chars = input.chars().peekable();
+    let mut output = String::with_capacity(input.len());
+    while let Some(c) = chars.next() {
+        let new_char = if c == '\\' {
+            let next_char = chars.next().expect("Strings cannot end in a back-slash");
+            match next_char {
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                '0' => '\0',
+                _ => next_char,
+            }
+        } else {
+            c
+        };
+        output.push(new_char);
+    }
+
+    output
 }

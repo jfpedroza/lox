@@ -140,3 +140,19 @@ fn test_string2() {
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }
+
+#[test]
+fn test_escaped_string() {
+    let input = r#""this\nis\ta \" string\\""#;
+    let tokens = Scanner::get_tokens(&input);
+    let expected_tokens = vec![
+        literal_token(
+            TokenKind::String,
+            input,
+            Literal::string("this\nis\ta \" string\\"),
+            0,
+        ),
+        Token::eof(Location::new(0, 25)),
+    ];
+    assert_eq!(Ok(expected_tokens), tokens);
+}

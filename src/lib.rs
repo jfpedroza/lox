@@ -1,4 +1,3 @@
-#![feature(peekable_next_if)]
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
