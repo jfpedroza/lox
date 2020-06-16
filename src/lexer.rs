@@ -60,17 +60,19 @@ pub enum NumberKind {
     Float,
 }
 
-enum Literal {
+#[derive(PartialEq, Debug)]
+pub enum Literal {
     Integer(u64),
     Float(f64),
     String(String),
 }
 
+#[derive(PartialEq, Debug)]
 pub struct Token<'a> {
-    kind: TokenKind,
-    lexeme: &'a str,
-    literal: Option<Literal>,
-    location: Location,
+    pub kind: TokenKind,
+    pub lexeme: &'a str,
+    pub literal: Option<Literal>,
+    pub location: Location,
 }
 
 pub struct Scanner<'a> {
@@ -78,8 +80,8 @@ pub struct Scanner<'a> {
     iter: std::iter::Peekable<std::str::Chars<'a>>,
     start: usize,
     current: usize,
-    line: usize,
-    column: usize,
+    start_location: Location,
+    current_location: Location,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -92,7 +94,7 @@ type TokenRes<'a> = Result<Token<'a>, ScanningError>;
 type ScanningRes<'a> = Result<Vec<Token<'a>>, ScanningError>;
 
 impl<'a> Token<'a> {
-    fn eof(location: Location) -> Self {
+    pub fn eof(location: Location) -> Self {
         Token {
             kind: TokenKind::EOF,
             lexeme: "",
@@ -115,44 +117,51 @@ impl<'a> Scanner<'a> {
             iter: input.chars().peekable(),
             start: 0,
             current: 0,
-            line: 0,
-            column: 0,
+            start_location: Default::default(),
+            current_location: Default::default(),
         }
     }
 
-    pub fn scan_tokens(&mut self) -> ScanningRes {
+    pub fn scan_tokens(&mut self) -> ScanningRes<'a> {
         let mut tokens: Vec<Token<'a>> = vec![];
         let mut token_res = self.scan_token();
 
         loop {
             match token_res {
-                Ok(Some(Token {
-                    kind: TokenKind::EOF,
-                    ..
-                })) => break,
                 Ok(Some(token)) => {
                     tokens.push(token);
                     token_res = self.scan_token();
                 }
                 Ok(None) => {
+                    if self.is_at_end() {
+                        break;
+                    }
                     token_res = self.scan_token();
                 }
                 Err(error) => {
+                    // TODO: Accept multiple scanning errors
                     return Err(error);
                 }
             }
         }
 
+        tokens.push(Token::eof(self.current_location));
         Ok(tokens)
+    }
+
+    pub fn get_tokens(input: &'a str) -> ScanningRes<'a> {
+        let mut scanner = Scanner::new(input);
+        scanner.scan_tokens()
     }
 
     fn scan_token(&mut self) -> Result<Option<Token<'a>>, ScanningError> {
         use TokenKind::*;
         self.skip_whitespace();
         self.start = self.current;
+        self.start_location = self.current_location;
 
         if self.is_at_end() {
-            return Ok(Some(Token::eof(self.location())));
+            return Ok(None);
         }
 
         let token = match self.advance().unwrap() {
@@ -216,8 +225,7 @@ impl<'a> Scanner<'a> {
             self.advance();
 
             if character == '\n' {
-                self.line += 1;
-                self.column = 0;
+                self.current_location.new_line();
             }
         }
     }
@@ -228,7 +236,7 @@ impl<'a> Scanner<'a> {
 
     fn advance(&mut self) -> Option<char> {
         self.current += 1;
-        self.column += 1;
+        self.current_location.advance();
         self.iter.next()
     }
 
@@ -237,17 +245,13 @@ impl<'a> Scanner<'a> {
     }
 
     fn matches(&mut self, expected: char) -> bool {
-        if let Some(_) = self.iter.next_if_eq(&expected) {
+        if self.iter.next_if_eq(&expected).is_some() {
             self.current += 1;
-            self.column += 1;
+            self.current_location.advance();
             true
         } else {
             false
         }
-    }
-
-    fn location(&self) -> Location {
-        Location::new(self.line, self.column)
     }
 
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
@@ -255,7 +259,7 @@ impl<'a> Scanner<'a> {
             kind,
             lexeme: &self.input[self.start..self.current],
             literal: None,
-            location: self.location(),
+            location: self.start_location,
         }
     }
 }
@@ -263,6 +267,6 @@ impl<'a> Scanner<'a> {
 fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
     ScanningError::UnrecognizedCharacter {
         character,
-        location: scanner.location(),
+        location: scanner.current_location,
     }
 }

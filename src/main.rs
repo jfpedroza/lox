@@ -9,14 +9,13 @@ use std::path::Path;
 
 fn main() {
     let args = std::env::args_os().skip(1).collect::<Vec<_>>();
-
-    let res = if args.len() > 1 {
-        eprintln!("Usage: lox [script]");
-        std::process::exit(64);
-    } else if args.len() == 1 {
-        run_file(&args[0])
-    } else {
-        run_prompt()
+    let res = match args.len() {
+        0 => run_prompt(),
+        1 => run_file(&args[0]),
+        _ => {
+            eprintln!("Usage: lox [script]");
+            std::process::exit(64);
+        }
     };
 
     match res {
