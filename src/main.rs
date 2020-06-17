@@ -19,7 +19,7 @@ fn main() {
     };
 
     match res {
-        Ok(()) => {}
+        Ok(()) => (),
         Err(err) => {
             print_err(err);
             std::process::exit(65);
@@ -53,12 +53,12 @@ fn run_prompt() -> Fallible<()> {
 
     loop {
         match rl.readline("\x1b[1;34mlox\x1b[0m> ") {
-            Ok(line) if line.is_empty() => {}
+            Ok(line) if line.is_empty() => (),
             Ok(line) => match run(&line) {
-                Ok(()) => {}
+                Ok(()) => (),
                 Err(err) => print_err(err),
             },
-            Err(ReadlineError::Interrupted) => {}
+            Err(ReadlineError::Interrupted) => (),
             Err(ReadlineError::Eof) => break,
             Err(err) => return Err(err.into()),
         }

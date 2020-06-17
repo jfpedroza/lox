@@ -96,6 +96,8 @@ pub enum ScanningError {
     UnterminatedString { location: Location },
     #[fail(display = "[{}] Invalid number {}", location, number)]
     InvalidNumber { number: String, location: Location },
+    #[fail(display = "[{}] Unterminated block comment", location)]
+    UnterminatedBlockComment { location: Location },
 }
 
 type TokenRes<'a> = Result<Token<'a>, ScanningError>;
@@ -186,28 +188,28 @@ impl<'a> Scanner<'a> {
         }
 
         let token = match self.advance().unwrap() {
-            '(' => Some(self.create_token(LeftParen)),
-            ')' => Some(self.create_token(RightParen)),
-            '{' => Some(self.create_token(LeftBrace)),
-            '}' => Some(self.create_token(RightBrace)),
-            ',' => Some(self.create_token(Comma)),
-            '.' => Some(self.create_token(Dot)),
-            '-' => Some(self.create_token(Minus)),
-            '+' => Some(self.create_token(Plus)),
-            ';' => Some(self.create_token(Semicolon)),
-            '*' => Some(self.create_token(Star)),
-            '%' => Some(self.create_token(Percent)),
+            '(' => self.create_token(LeftParen),
+            ')' => self.create_token(RightParen),
+            '{' => self.create_token(LeftBrace),
+            '}' => self.create_token(RightBrace),
+            ',' => self.create_token(Comma),
+            '.' => self.create_token(Dot),
+            '-' => self.create_token(Minus),
+            '+' => self.create_token(Plus),
+            ';' => self.create_token(Semicolon),
+            '*' => self.create_token(Star),
+            '%' => self.create_token(Percent),
             '!' => {
                 let kind = if self.matches('=') { BangEqual } else { Bang };
-                Some(self.create_token(kind))
+                self.create_token(kind)
             }
             '=' => {
                 let kind = if self.matches('=') { EqualEqual } else { Equal };
-                Some(self.create_token(kind))
+                self.create_token(kind)
             }
             '<' => {
                 let kind = if self.matches('=') { LessEqual } else { Less };
-                Some(self.create_token(kind))
+                self.create_token(kind)
             }
             '>' => {
                 let kind = if self.matches('=') {
@@ -215,29 +217,26 @@ impl<'a> Scanner<'a> {
                 } else {
                     Greater
                 };
-                Some(self.create_token(kind))
+                self.create_token(kind)
             }
             '/' => {
                 if self.matches('/') {
-                    while let Some(character) = self.peek() {
-                        if character == '\n' {
-                            break;
-                        } else {
-                            self.advance();
-                        }
-                    }
-                    None
+                    self.advance_while(|ch| ch != '\n');
+                    return Ok(None);
+                } else if self.matches('*') {
+                    self.skip_block_comment()?;
+                    return Ok(None);
                 } else {
-                    Some(self.create_token(Slash))
+                    self.create_token(Slash)
                 }
             }
-            '"' => Some(self.recognize_string()?),
-            '0'..='9' => Some(self.recognize_number()?),
-            ch if is_alpha(ch) => Some(self.recognize_identifier()?),
+            '"' => self.recognize_string()?,
+            '0'..='9' => self.recognize_number()?,
+            ch if is_alpha(ch) => self.recognize_identifier()?,
             character => return Err(unrecognized_character(&self, character)),
         };
 
-        Ok(token)
+        Ok(Some(token))
     }
 
     fn skip_whitespace(&mut self) {
@@ -373,6 +372,33 @@ impl<'a> Scanner<'a> {
         Ok(self.create_token(kind))
     }
 
+    fn skip_block_comment(&mut self) -> Result<(), ScanningError> {
+        let mut depth = 1usize;
+        while let Some(ch) = self.advance() {
+            match (ch, self.peek()) {
+                ('/', Some('*')) => {
+                    self.advance();
+                    depth += 1;
+                }
+                ('*', Some('/')) => {
+                    self.advance();
+                    depth -= 1;
+
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                _ => (),
+            }
+        }
+
+        if depth == 0 {
+            Ok(())
+        } else {
+            Err(unterminated_block_comment(&self))
+        }
+    }
+
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
         Token {
             kind,
@@ -412,25 +438,31 @@ fn invalid_number(scanner: &Scanner, number: &str) -> ScanningError {
     }
 }
 
+fn unterminated_block_comment(scanner: &Scanner) -> ScanningError {
+    ScanningError::UnterminatedBlockComment {
+        location: scanner.current_location,
+    }
+}
+
 fn keyword_to_kind(keyword: &str) -> Option<TokenKind> {
     use TokenKind::*;
-    match keyword {
-        "and" => Some(And),
-        "class" => Some(Class),
-        "else" => Some(Else),
-        "false" => Some(False),
-        "for" => Some(For),
-        "fun" => Some(Fun),
-        "if" => Some(If),
-        "nil" => Some(Nil),
-        "or" => Some(Or),
-        "print" => Some(Print),
-        "return" => Some(Return),
-        "super" => Some(Super),
-        "this" => Some(This),
-        "true" => Some(True),
-        "var" => Some(Var),
-        "while" => Some(While),
-        _ => None,
-    }
+    Some(match keyword {
+        "and" => And,
+        "class" => Class,
+        "else" => Else,
+        "false" => False,
+        "for" => For,
+        "fun" => Fun,
+        "if" => If,
+        "nil" => Nil,
+        "or" => Or,
+        "print" => Print,
+        "return" => Return,
+        "super" => Super,
+        "this" => This,
+        "true" => True,
+        "var" => Var,
+        "while" => While,
+        _ => return None,
+    })
 }
