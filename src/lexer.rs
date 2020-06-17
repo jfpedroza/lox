@@ -2,6 +2,7 @@
 mod tests;
 
 use crate::location::Location;
+use crate::utils::*;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// Enum representing lexeme types
@@ -232,6 +233,7 @@ impl<'a> Scanner<'a> {
             }
             '"' => Some(self.recognize_string()?),
             '0'..='9' => Some(self.recognize_number()?),
+            ch if is_alpha(ch) => Some(self.recognize_identifier()?),
             character => return Err(unrecognized_character(&self, character)),
         };
 
@@ -292,6 +294,10 @@ impl<'a> Scanner<'a> {
         }
     }
 
+    fn get_lexeme(&self) -> &'a str {
+        &self.input[self.start..self.current]
+    }
+
     fn recognize_string(&mut self) -> TokenRes<'a> {
         while let Some(character) = self.peek() {
             match character {
@@ -322,16 +328,15 @@ impl<'a> Scanner<'a> {
     }
 
     fn recognize_number(&mut self) -> TokenRes<'a> {
-        self.advance_while(|ch| ch.is_digit(10));
+        self.advance_while(is_digit);
 
-        let mut is_float = if self.peek() == Some('.')
-            && self.peek_next().filter(|ch| ch.is_digit(10)).is_some()
-        {
-            self.advance();
-            self.advance_while(|ch| ch.is_digit(10));
-            true
-        } else {
-            false
+        let mut is_float = match (self.peek(), self.peek_next()) {
+            (Some('.'), Some(ch)) if is_digit(ch) => {
+                self.advance();
+                self.advance_while(is_digit);
+                true
+            }
+            _ => false,
         };
 
         if self.matches('e') || self.matches('E') {
@@ -339,7 +344,7 @@ impl<'a> Scanner<'a> {
             if !self.matches('+') {
                 self.matches('-');
             };
-            self.advance_while(|ch| ch.is_digit(10));
+            self.advance_while(is_digit);
         }
 
         let kind = TokenKind::Number(if is_float {
@@ -348,7 +353,7 @@ impl<'a> Scanner<'a> {
             NumberKind::Integer
         });
 
-        let lexeme = &self.input[self.start..self.current];
+        let lexeme = self.get_lexeme();
 
         let literal = if is_float {
             Literal::Float(lexeme.parse().map_err(|_| invalid_number(&self, lexeme))?)
@@ -359,10 +364,19 @@ impl<'a> Scanner<'a> {
         Ok(self.create_literal_token(kind, literal))
     }
 
+    fn recognize_identifier(&mut self) -> TokenRes<'a> {
+        self.advance_while(is_alphanumeric);
+
+        let text = self.get_lexeme();
+        let kind = keyword_to_kind(text).unwrap_or(TokenKind::Identifier);
+
+        Ok(self.create_token(kind))
+    }
+
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
         Token {
             kind,
-            lexeme: &self.input[self.start..self.current],
+            lexeme: self.get_lexeme(),
             literal: None,
             location: self.start_location,
         }
@@ -371,7 +385,7 @@ impl<'a> Scanner<'a> {
     fn create_literal_token(&self, kind: TokenKind, literal: Literal) -> Token<'a> {
         Token {
             kind,
-            lexeme: &self.input[self.start..self.current],
+            lexeme: &self.get_lexeme(),
             literal: Some(literal),
             location: self.start_location,
         }
@@ -398,24 +412,25 @@ fn invalid_number(scanner: &Scanner, number: &str) -> ScanningError {
     }
 }
 
-fn unescape_string(input: &str) -> String {
-    let mut chars = input.chars().peekable();
-    let mut output = String::with_capacity(input.len());
-    while let Some(c) = chars.next() {
-        let new_char = if c == '\\' {
-            let next_char = chars.next().expect("Strings cannot end in a back-slash");
-            match next_char {
-                'n' => '\n',
-                'r' => '\r',
-                't' => '\t',
-                '0' => '\0',
-                _ => next_char,
-            }
-        } else {
-            c
-        };
-        output.push(new_char);
+fn keyword_to_kind(keyword: &str) -> Option<TokenKind> {
+    use TokenKind::*;
+    match keyword {
+        "and" => Some(And),
+        "class" => Some(Class),
+        "else" => Some(Else),
+        "false" => Some(False),
+        "for" => Some(For),
+        "fun" => Some(Fun),
+        "if" => Some(If),
+        "nil" => Some(Nil),
+        "or" => Some(Or),
+        "print" => Some(Print),
+        "return" => Some(Return),
+        "super" => Some(Super),
+        "this" => Some(This),
+        "true" => Some(True),
+        "var" => Some(Var),
+        "while" => Some(While),
+        _ => None,
     }
-
-    output
 }

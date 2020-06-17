@@ -1,7 +1,7 @@
 use super::{TokenKind::*, *};
 use crate::location::Location;
 
-const LEXEME_KINDS: [(&str, TokenKind); 20] = [
+const LEXEME_KINDS: [(&str, TokenKind); 36] = [
     ("(", LeftParen),
     (")", RightParen),
     ("{", LeftBrace),
@@ -22,6 +22,22 @@ const LEXEME_KINDS: [(&str, TokenKind); 20] = [
     ("<=", LessEqual),
     (">", Greater),
     (">=", GreaterEqual),
+    ("and", And),
+    ("class", Class),
+    ("else", Else),
+    ("false", False),
+    ("for", For),
+    ("fun", Fun),
+    ("if", If),
+    ("nil", Nil),
+    ("or", Or),
+    ("print", Print),
+    ("return", Return),
+    ("super", Super),
+    ("this", This),
+    ("true", True),
+    ("var", Var),
+    ("while", While),
 ];
 
 fn no_token(column: usize) -> Vec<Token<'static>> {
@@ -87,7 +103,7 @@ fn float_token<'a>(lexeme: &'a str, literal: f64, column: usize) -> Token<'a> {
 
 #[test]
 fn test_single_token() {
-    for (lexeme, kind) in &LEXEME_KINDS {
+    for (lexeme, kind) in LEXEME_KINDS.iter() {
         let tokens = Scanner::get_tokens(lexeme);
         let expected_token = non_literal_token(*kind, lexeme, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
@@ -177,6 +193,23 @@ fn test_float() {
     ] {
         let tokens = Scanner::get_tokens(&input);
         let expected_token = float_token(input, *output, 0);
+        assert_eq!(Ok(one_token(expected_token)), tokens);
+    }
+}
+
+#[test]
+fn test_identifier() {
+    for input in &[
+        "hello",
+        "hello_world",
+        "h1",
+        "r",
+        "anda",
+        "CamelCase",
+        "_underscore",
+    ] {
+        let tokens = Scanner::get_tokens(&input);
+        let expected_token = non_literal_token(TokenKind::Identifier, input, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }
 }
