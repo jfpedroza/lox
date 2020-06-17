@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::location::Location;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 

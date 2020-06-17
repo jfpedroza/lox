@@ -1,8 +1,5 @@
-use lox::lexer::{
-    Literal, NumberKind, Scanner, Token,
-    TokenKind::{self, *},
-};
-use lox::location::Location;
+use super::{TokenKind::*, *};
+use crate::location::Location;
 
 const LEXEME_KINDS: [(&str, TokenKind); 20] = [
     ("(", LeftParen),
