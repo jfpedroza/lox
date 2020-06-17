@@ -1,5 +1,5 @@
 use lox::lexer::{
-    Literal, Scanner, Token,
+    Literal, NumberKind, Scanner, Token,
     TokenKind::{self, *},
 };
 use lox::location::Location;
@@ -66,6 +66,28 @@ fn literal_token<'a>(
     }
 }
 
+fn string_token<'a>(lexeme: &'a str, literal: &'a str, column: usize) -> Token<'a> {
+    literal_token(TokenKind::String, lexeme, Literal::string(literal), column)
+}
+
+fn integer_token<'a>(lexeme: &'a str, literal: i64, column: usize) -> Token<'a> {
+    literal_token(
+        TokenKind::Number(NumberKind::Integer),
+        lexeme,
+        Literal::Integer(literal),
+        column,
+    )
+}
+
+fn float_token<'a>(lexeme: &'a str, literal: f64, column: usize) -> Token<'a> {
+    literal_token(
+        TokenKind::Number(NumberKind::Float),
+        lexeme,
+        Literal::Float(literal),
+        column,
+    )
+}
+
 #[test]
 fn test_single_token() {
     for (lexeme, kind) in &LEXEME_KINDS {
@@ -114,12 +136,7 @@ fn test_multiple_tokens() {
 fn test_string() {
     let input = r#""this is a string""#;
     let tokens = Scanner::get_tokens(&input);
-    let expected_token = literal_token(
-        TokenKind::String,
-        &input,
-        Literal::string("this is a string"),
-        0,
-    );
+    let expected_token = string_token(&input, "this is a string", 0);
     assert_eq!(Ok(one_token(expected_token)), tokens);
 }
 
@@ -129,12 +146,7 @@ fn test_string2() {
     let tokens = Scanner::get_tokens(&input);
     let expected_tokens = vec![
         non_literal_token(LeftParen, "(", 0),
-        literal_token(
-            TokenKind::String,
-            r#""this is a string""#,
-            Literal::string("this is a string"),
-            1,
-        ),
+        string_token(r#""this is a string""#, "this is a string", 1),
         non_literal_token(RightParen, ")", 19),
         Token::eof(Location::new(0, 20)),
     ];
@@ -145,14 +157,29 @@ fn test_string2() {
 fn test_escaped_string() {
     let input = r#""this\nis\ta \" string\\""#;
     let tokens = Scanner::get_tokens(&input);
-    let expected_tokens = vec![
-        literal_token(
-            TokenKind::String,
-            input,
-            Literal::string("this\nis\ta \" string\\"),
-            0,
-        ),
-        Token::eof(Location::new(0, 25)),
-    ];
-    assert_eq!(Ok(expected_tokens), tokens);
+    let expected_token = string_token(input, "this\nis\ta \" string\\", 0);
+    assert_eq!(Ok(one_token(expected_token)), tokens);
+}
+
+#[test]
+fn test_integer() {
+    let input = "1234";
+    let tokens = Scanner::get_tokens(&input);
+    let expected_token = integer_token(input, 1234, 0);
+    assert_eq!(Ok(one_token(expected_token)), tokens);
+}
+
+#[test]
+fn test_float() {
+    for (input, output) in &[
+        ("1234.567", 1234.567),
+        ("1234.567e2", 123456.7),
+        ("1234.567e+2", 123456.7),
+        ("1234.567e-2", 12.34567),
+        ("12e12", 12e12),
+    ] {
+        let tokens = Scanner::get_tokens(&input);
+        let expected_token = float_token(input, *output, 0);
+        assert_eq!(Ok(one_token(expected_token)), tokens);
+    }
 }

@@ -62,7 +62,7 @@ pub enum NumberKind {
 
 #[derive(PartialEq, Debug)]
 pub enum Literal {
-    Integer(u64),
+    Integer(i64),
     Float(f64),
     String(String),
 }
@@ -88,8 +88,10 @@ pub struct Scanner<'a> {
 pub enum ScanningError {
     #[fail(display = "[{}] Unrecognized character '{}'", location, character)]
     UnrecognizedCharacter { character: char, location: Location },
-    #[fail(display = "[{}] Unterminated string ", location)]
+    #[fail(display = "[{}] Unterminated string", location)]
     UnterminatedString { location: Location },
+    #[fail(display = "[{}] Invalid number {}", location, number)]
+    InvalidNumber { number: String, location: Location },
 }
 
 type TokenRes<'a> = Result<Token<'a>, ScanningError>;
@@ -114,7 +116,14 @@ impl<'a> Token<'a> {
 
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "<{:?}, {}, {}>", self.kind, self.lexeme, self.location)
+        let data = match &self.literal {
+            Some(Literal::String(string)) => format!("{}, \"{}\"", self.lexeme, string),
+            Some(Literal::Integer(integer)) => format!("{}, {}", self.lexeme, integer),
+            Some(Literal::Float(float)) => format!("{}, {}", self.lexeme, float),
+            None => String::from(self.lexeme),
+        };
+
+        write!(f, "<{:?}, {}, {}>", self.kind, data, self.location)
     }
 }
 
@@ -219,6 +228,7 @@ impl<'a> Scanner<'a> {
                 }
             }
             '"' => Some(self.recognize_string()?),
+            '0'..='9' => Some(self.recognize_number()?),
             character => return Err(unrecognized_character(&self, character)),
         };
 
@@ -250,7 +260,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn peek(&self) -> Option<char> {
-        self.chars.clone().nth(0)
+        self.chars.clone().next()
     }
 
     fn peek_next(&self) -> Option<char> {
@@ -263,6 +273,19 @@ impl<'a> Scanner<'a> {
             true
         } else {
             false
+        }
+    }
+
+    fn advance_while<F>(&mut self, mut predicate: F)
+    where
+        F: FnMut(char) -> bool,
+    {
+        while let Some(ch) = self.peek() {
+            if predicate(ch) {
+                self.advance();
+            } else {
+                break;
+            }
         }
     }
 
@@ -295,6 +318,44 @@ impl<'a> Scanner<'a> {
         Ok(self.create_literal_token(TokenKind::String, literal))
     }
 
+    fn recognize_number(&mut self) -> TokenRes<'a> {
+        self.advance_while(|ch| ch.is_digit(10));
+
+        let mut is_float = if self.peek() == Some('.')
+            && self.peek_next().filter(|ch| ch.is_digit(10)).is_some()
+        {
+            self.advance();
+            self.advance_while(|ch| ch.is_digit(10));
+            true
+        } else {
+            false
+        };
+
+        if self.matches('e') || self.matches('E') {
+            is_float = true;
+            if !self.matches('+') {
+                self.matches('-');
+            };
+            self.advance_while(|ch| ch.is_digit(10));
+        }
+
+        let kind = TokenKind::Number(if is_float {
+            NumberKind::Float
+        } else {
+            NumberKind::Integer
+        });
+
+        let lexeme = &self.input[self.start..self.current];
+
+        let literal = if is_float {
+            Literal::Float(lexeme.parse().map_err(|_| invalid_number(&self, lexeme))?)
+        } else {
+            Literal::Integer(lexeme.parse().map_err(|_| invalid_number(&self, lexeme))?)
+        };
+
+        Ok(self.create_literal_token(kind, literal))
+    }
+
     fn create_token(&self, kind: TokenKind) -> Token<'a> {
         Token {
             kind,
@@ -324,6 +385,13 @@ fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
 fn unterminated_string(scanner: &Scanner) -> ScanningError {
     ScanningError::UnterminatedString {
         location: scanner.current_location,
+    }
+}
+
+fn invalid_number(scanner: &Scanner, number: &str) -> ScanningError {
+    ScanningError::InvalidNumber {
+        number: String::from(number),
+        location: scanner.start_location,
     }
 }
 
