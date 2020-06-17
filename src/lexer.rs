@@ -6,7 +6,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// Enum representing lexeme types
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum TokenKind {
+enum TokenKind {
     // Single-character tokens
     LeftParen,
     RightParen,
@@ -58,13 +58,13 @@ pub enum TokenKind {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum NumberKind {
+enum NumberKind {
     Integer,
     Float,
 }
 
 #[derive(PartialEq, Debug)]
-pub enum Literal {
+enum Literal {
     Integer(i64),
     Float(f64),
     String(String),
@@ -72,10 +72,10 @@ pub enum Literal {
 
 #[derive(PartialEq, Debug)]
 pub struct Token<'a> {
-    pub kind: TokenKind,
-    pub lexeme: &'a str,
-    pub literal: Option<Literal>,
-    pub location: Location,
+    kind: TokenKind,
+    lexeme: &'a str,
+    literal: Option<Literal>,
+    location: Location,
 }
 
 pub struct Scanner<'a> {
@@ -101,13 +101,13 @@ type TokenRes<'a> = Result<Token<'a>, ScanningError>;
 type ScanningRes<'a> = Result<Vec<Token<'a>>, ScanningError>;
 
 impl Literal {
-    pub fn string(string: &str) -> Self {
+    fn string(string: &str) -> Self {
         Literal::String(String::from(string))
     }
 }
 
 impl<'a> Token<'a> {
-    pub fn eof(location: Location) -> Self {
+    fn eof(location: Location) -> Self {
         Token {
             kind: TokenKind::EOF,
             lexeme: "",
