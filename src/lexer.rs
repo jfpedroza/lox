@@ -388,6 +388,7 @@ impl<'a> Scanner<'a> {
                         break;
                     }
                 }
+                ('\n', _) => self.current_location.new_line(),
                 _ => (),
             }
         }

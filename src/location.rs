@@ -23,6 +23,6 @@ impl Location {
 
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "line {}:{}", self.line, self.column)
+        write!(f, "line {}:{}", self.line + 1, self.column)
     }
 }
