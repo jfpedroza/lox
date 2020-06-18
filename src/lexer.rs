@@ -258,9 +258,13 @@ impl<'a> Scanner<'a> {
     }
 
     fn advance(&mut self) -> Option<char> {
-        self.current += 1;
-        self.current_location.advance();
-        self.chars.next()
+        if let Some(ch) = self.chars.next() {
+            self.current += 1;
+            self.current_location.advance();
+            Some(ch)
+        } else {
+            None
+        }
     }
 
     fn peek(&self) -> Option<char> {
@@ -422,7 +426,7 @@ impl<'a> Scanner<'a> {
 fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
     ScanningError::UnrecognizedCharacter {
         character,
-        location: scanner.current_location,
+        location: scanner.start_location,
     }
 }
 

@@ -1,4 +1,4 @@
-use super::{TokenKind::*, *};
+use super::{ScanningError::*, TokenKind::*, *};
 use crate::location::Location;
 
 const LEXEME_KINDS: [(&str, TokenKind); 36] = [
@@ -132,7 +132,7 @@ fn test_line_comment() {
 
 #[test]
 fn test_block_comment() {
-    let input = r#"/* This is a block 
+    let input = r#"/* This is a block
         comment */"#;
     let tokens = Scanner::get_tokens(input);
     assert_eq!(Ok(no_token(1, 18)), tokens);
@@ -242,7 +242,7 @@ fn test_big_input() {
         var hello = "world";
         var a = (b + c - d) * e/1.0
 
-        /* this is a 
+        /* this is a
          * block comment */
         fun my_function(something) {
             print something;
@@ -320,4 +320,50 @@ fn test_big_input() {
     for (i, token) in tokens.unwrap().into_iter().enumerate() {
         assert_eq!(token, expected_tokens[i]);
     }
+}
+
+#[test]
+fn test_error1() {
+    let tokens = Scanner::get_tokens("invalid_character?");
+    assert_eq!(
+        Err(UnrecognizedCharacter {
+            character: '?',
+            location: Location::new(0, 17),
+        }),
+        tokens
+    );
+}
+
+#[test]
+fn test_error2() {
+    let tokens = Scanner::get_tokens("\"unterminated");
+    assert_eq!(
+        Err(UnterminatedString {
+            location: Location::new(0, 13)
+        }),
+        tokens
+    );
+}
+
+#[test]
+fn test_error3() {
+    let tokens = Scanner::get_tokens("var = 3\npi=3.14e+ - 8");
+    assert_eq!(
+        Err(InvalidNumber {
+            number: std::string::String::from("3.14e+"),
+            location: Location::new(1, 3)
+        }),
+        tokens
+    );
+}
+
+#[test]
+fn test_error4() {
+    let tokens = Scanner::get_tokens("/* /* */");
+    assert_eq!(
+        Err(UnterminatedBlockComment {
+            location: Location::new(0, 8)
+        }),
+        tokens
+    );
 }
