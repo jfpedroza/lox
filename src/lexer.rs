@@ -7,7 +7,7 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// Enum representing lexeme types
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum TokenKind {
+pub enum TokenKind {
     // Single-character tokens
     LeftParen,
     RightParen,
@@ -34,7 +34,7 @@ enum TokenKind {
 
     // Literals
     Identifier,
-    String,
+    Str,
     Number(NumberKind),
 
     // Keywords
@@ -59,24 +59,24 @@ enum TokenKind {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-enum NumberKind {
+pub enum NumberKind {
     Integer,
     Float,
 }
 
 #[derive(PartialEq, Debug)]
-enum Literal {
+pub enum Literal {
     Integer(i64),
     Float(f64),
-    String(String),
+    Str(String),
 }
 
 #[derive(PartialEq, Debug)]
 pub struct Token<'a> {
-    kind: TokenKind,
-    lexeme: &'a str,
-    literal: Option<Literal>,
-    location: Location,
+    pub kind: TokenKind,
+    pub lexeme: &'a str,
+    pub literal: Option<Literal>,
+    pub location: Location,
 }
 
 pub struct Scanner<'a> {
@@ -105,7 +105,7 @@ type ScanningRes<'a> = Result<Vec<Token<'a>>, ScanningError>;
 
 impl Literal {
     fn string(string: &str) -> Self {
-        Literal::String(String::from(string))
+        Literal::Str(String::from(string))
     }
 }
 
@@ -113,7 +113,7 @@ impl<'a> Token<'a> {
     fn eof(location: Location) -> Self {
         Token {
             kind: TokenKind::EOF,
-            lexeme: "",
+            lexeme: "EOF",
             literal: None,
             location,
         }
@@ -123,7 +123,7 @@ impl<'a> Token<'a> {
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let data = match &self.literal {
-            Some(Literal::String(string)) => format!("{}, \"{}\"", self.lexeme, string),
+            Some(Literal::Str(string)) => format!("{}, \"{}\"", self.lexeme, string),
             Some(Literal::Integer(integer)) => format!("{}, {}", self.lexeme, integer),
             Some(Literal::Float(float)) => format!("{}, {}", self.lexeme, float),
             None => String::from(self.lexeme),
@@ -327,7 +327,7 @@ impl<'a> Scanner<'a> {
 
         let value = unescape_string(&self.input[self.start + 1..self.current - 1]);
         let literal = Literal::string(&value);
-        Ok(self.create_literal_token(TokenKind::String, literal))
+        Ok(self.create_literal_token(TokenKind::Str, literal))
     }
 
     fn recognize_number(&mut self) -> TokenRes<'a> {

@@ -86,18 +86,12 @@ fn literal_token<'a>(
 }
 
 fn string_token<'a>(lexeme: &'a str, literal: &'a str, line: usize, column: usize) -> Token<'a> {
-    literal_token(
-        TokenKind::String,
-        lexeme,
-        Literal::string(literal),
-        line,
-        column,
-    )
+    literal_token(Str, lexeme, Literal::string(literal), line, column)
 }
 
 fn integer_token<'a>(lexeme: &'a str, literal: i64, line: usize, column: usize) -> Token<'a> {
     literal_token(
-        TokenKind::Number(NumberKind::Integer),
+        Number(NumberKind::Integer),
         lexeme,
         Literal::Integer(literal),
         line,
@@ -107,7 +101,7 @@ fn integer_token<'a>(lexeme: &'a str, literal: i64, line: usize, column: usize) 
 
 fn float_token<'a>(lexeme: &'a str, literal: f64, line: usize, column: usize) -> Token<'a> {
     literal_token(
-        TokenKind::Number(NumberKind::Float),
+        Number(NumberKind::Float),
         lexeme,
         Literal::Float(literal),
         line,
@@ -231,7 +225,7 @@ fn test_identifier() {
         "_underscore",
     ] {
         let tokens = Scanner::get_tokens(&input);
-        let expected_token = non_literal_token(TokenKind::Identifier, input, 0, 0);
+        let expected_token = non_literal_token(Identifier, input, 0, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }
 }
