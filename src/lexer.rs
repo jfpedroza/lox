@@ -140,8 +140,8 @@ impl<'a> Scanner<'a> {
             chars: input.chars(),
             start: 0,
             current: 0,
-            start_location: Default::default(),
-            current_location: Default::default(),
+            start_location: Location::new(0, 0),
+            current_location: Location::new(0, 0),
         }
     }
 

@@ -2,9 +2,10 @@ extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 
-pub mod lexer;
-pub mod location;
-pub mod utils;
+mod expr;
+mod lexer;
+mod location;
+mod utils;
 
 use failure::Fallible;
 use lexer::Scanner;
