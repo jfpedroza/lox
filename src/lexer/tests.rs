@@ -1,13 +1,15 @@
 use super::{ScanningError::*, TokenKind::*, *};
 use crate::location::Location;
 
-const LEXEME_KINDS: [(&str, TokenKind); 36] = [
+const LEXEME_KINDS: [(&str, TokenKind); 38] = [
     ("(", LeftParen),
     (")", RightParen),
     ("{", LeftBrace),
     ("}", RightBrace),
     (",", Comma),
     (".", Dot),
+    ("?", Question),
+    (":", Colon),
     ("-", Minus),
     ("+", Plus),
     (";", Semicolon),
@@ -134,7 +136,7 @@ fn test_block_comment() {
 
 #[test]
 fn test_multiple_tokens() {
-    let tokens = Scanner::get_tokens("(){},.-+;*!=!%===<=</>>=//this should be ignored");
+    let tokens = Scanner::get_tokens("(){},.-+;*!=!%===<=</>>=?://this should be ignored");
     let expected_tokens = vec![
         non_literal_token(LeftParen, "(", 0, 0),
         non_literal_token(RightParen, ")", 0, 1),
@@ -156,7 +158,9 @@ fn test_multiple_tokens() {
         non_literal_token(Slash, "/", 0, 20),
         non_literal_token(Greater, ">", 0, 21),
         non_literal_token(GreaterEqual, ">=", 0, 22),
-        Token::eof(Location::new(0, 48)),
+        non_literal_token(Question, "?", 0, 24),
+        non_literal_token(Colon, ":", 0, 25),
+        Token::eof(Location::new(0, 50)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }
@@ -318,10 +322,10 @@ fn test_big_input() {
 
 #[test]
 fn test_error1() {
-    let tokens = Scanner::get_tokens("invalid_character?");
+    let tokens = Scanner::get_tokens("invalid_character¬");
     assert_eq!(
         Err(UnrecognizedCharacter {
-            character: '?',
+            character: '¬',
             location: Location::new(0, 17),
         }),
         tokens

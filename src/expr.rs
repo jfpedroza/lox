@@ -6,6 +6,8 @@ pub enum Expr {
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
+    Comma(Box<Expr>, Box<Expr>),
+    Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
@@ -37,6 +39,14 @@ impl Expr {
     pub fn groping(expr: Expr) -> Self {
         Expr::Grouping(Box::new(expr))
     }
+
+    pub fn comma(left: Expr, right: Expr) -> Self {
+        Expr::Comma(Box::new(left), Box::new(right))
+    }
+
+    pub fn conditional(cond: Expr, left: Expr, right: Expr) -> Self {
+        Expr::Conditional(Box::new(cond), Box::new(left), Box::new(right))
+    }
 }
 
 impl fmt::Debug for Expr {
@@ -47,6 +57,8 @@ impl fmt::Debug for Expr {
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
             Grouping(expr) => parenthesize("group", &[expr]),
+            Comma(left, right) => parenthesize("comma", &[left, right]),
+            Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
         };
 
         write!(f, "{}", string)

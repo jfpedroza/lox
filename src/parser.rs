@@ -16,6 +16,11 @@ pub enum ParsingError {
     ExpectedExpression(Location, String),
     #[fail(display = "[{}] Exptected ')' after expression. Got {}", _0, _1)]
     ExpectedCloseParen(Location, String),
+    #[fail(
+        display = "[{}] Exptected ':' for conditional expression. Got {}",
+        _0, _1
+    )]
+    ExpectedColon(Location, String),
 }
 
 type TokenRef<'a> = &'a Token<'a>;
@@ -78,7 +83,25 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> ExprParseRes {
-        self.equality()
+        let expr = self.conditional()?;
+        if self.matches(&[Comma]).is_some() {
+            let right = self.expression()?;
+            Ok(Expr::comma(expr, right))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn conditional(&mut self) -> ExprParseRes {
+        let expr = self.equality()?;
+        if self.matches(&[Question]).is_some() {
+            let left = self.expression()?;
+            self.consume(Colon, Self::expected_colon_error)?;
+            let right = self.conditional()?;
+            Ok(Expr::conditional(expr, left, right))
+        } else {
+            Ok(expr)
+        }
     }
 
     fn left_binary_expression<F>(&mut self, kinds: &[TokenKind], mut expr_fn: F) -> ExprParseRes
@@ -124,16 +147,16 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> ExprParseRes {
-        // TODO: Try to refactor it using Option::or_else
+        let int_kind = Number(NumberKind::Integer);
+        let float_kind = Number(NumberKind::Float);
+
         if self.matches(&[False]).is_some() {
             Ok(Expr::boolean(false))
         } else if self.matches(&[True]).is_some() {
             Ok(Expr::boolean(true))
         } else if self.matches(&[Nil]).is_some() {
             Ok(Expr::nil())
-        } else if let Some(token) =
-            self.matches(&[Number(NumberKind::Integer), Number(NumberKind::Float), Str])
-        {
+        } else if let Some(token) = self.matches(&[int_kind, float_kind, Str]) {
             Ok(Expr::from_literal(token.literal.as_ref().unwrap()))
         } else if self.matches(&[LeftParen]).is_some() {
             let expr = self.expression()?;
@@ -168,5 +191,10 @@ impl<'a> Parser<'a> {
     fn expected_expression_error(&self) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedExpression(token.location, token.lexeme.to_string())
+    }
+
+    fn expected_colon_error(&self) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedColon(token.location, token.lexeme.to_string())
     }
 }
