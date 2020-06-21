@@ -78,7 +78,7 @@ pub struct Token<'a> {
     pub kind: TokenKind,
     pub lexeme: &'a str,
     pub literal: Option<Literal>,
-    pub location: Location,
+    pub loc: Location,
 }
 
 pub struct Scanner<'a> {
@@ -109,12 +109,12 @@ impl Literal {
 }
 
 impl<'a> Token<'a> {
-    fn eof(location: Location) -> Self {
+    fn eof(loc: Location) -> Self {
         Token {
             kind: TokenKind::EOF,
             lexeme: "EOF",
             literal: None,
-            location,
+            loc,
         }
     }
 }
@@ -128,7 +128,7 @@ impl Display for Token<'_> {
             None => String::from(self.lexeme),
         };
 
-        write!(f, "<{:?}, {}, {}>", self.kind, data, self.location)
+        write!(f, "<{:?}, {}, {}>", self.kind, data, self.loc)
     }
 }
 
@@ -410,7 +410,7 @@ impl<'a> Scanner<'a> {
             kind,
             lexeme: self.get_lexeme(),
             literal: None,
-            location: self.start_location,
+            loc: self.start_location,
         }
     }
 
@@ -419,7 +419,7 @@ impl<'a> Scanner<'a> {
             kind,
             lexeme: &self.get_lexeme(),
             literal: Some(literal),
-            location: self.start_location,
+            loc: self.start_location,
         }
     }
 }

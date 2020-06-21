@@ -23,6 +23,18 @@ impl Location {
 
 impl Display for Location {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "line {}:{}", self.line + 1, self.column)
+        write!(f, "{}:{}", self.line + 1, self.column)
+    }
+}
+
+#[derive(PartialEq)]
+pub struct Located<T: PartialEq> {
+    pub kind: T,
+    pub loc: Location,
+}
+
+impl<T: PartialEq> Located<T> {
+    pub fn new(kind: T, loc: Location) -> Self {
+        Self { kind, loc }
     }
 }
