@@ -89,7 +89,7 @@ impl<'a> Parser<'a> {
         let expr = self.conditional()?;
         if let Some(token) = self.matches(&[Comma]) {
             let right = self.expression()?;
-            Ok(Expr::comma(expr, right, token.location))
+            Ok(Expr::comma(expr, right, token.loc))
         } else {
             Ok(expr)
         }
@@ -101,7 +101,7 @@ impl<'a> Parser<'a> {
             let left = self.expression()?;
             self.consume(Colon, Self::expected_colon_error)?;
             let right = self.conditional()?;
-            Ok(Expr::conditional(expr, left, right, op_token.location))
+            Ok(Expr::conditional(expr, left, right, op_token.loc))
         } else {
             Ok(expr)
         }
@@ -117,7 +117,7 @@ impl<'a> Parser<'a> {
             let op = op_token.kind.into();
             let right = expr_fn(self)?;
 
-            expr = Expr::binary(expr, op, right, op_token.location);
+            expr = Expr::binary(expr, op, right, op_token.loc);
         }
 
         Ok(expr)
@@ -143,7 +143,7 @@ impl<'a> Parser<'a> {
         if let Some(op_token) = self.matches(&[Bang, Minus]) {
             let op = op_token.kind.into();
             let right = self.unary()?;
-            return Ok(Expr::unary(op, right, op_token.location));
+            return Ok(Expr::unary(op, right, op_token.loc));
         }
 
         self.primary()
@@ -154,18 +154,18 @@ impl<'a> Parser<'a> {
         let float_kind = Number(NumberKind::Float);
 
         if let Some(token) = self.matches(&[False]) {
-            Ok(Expr::boolean(false, token.location))
+            Ok(Expr::boolean(false, token.loc))
         } else if let Some(token) = self.matches(&[True]) {
-            Ok(Expr::boolean(true, token.location))
+            Ok(Expr::boolean(true, token.loc))
         } else if let Some(token) = self.matches(&[Nil]) {
-            Ok(Expr::nil(token.location))
+            Ok(Expr::nil(token.loc))
         } else if let Some(token) = self.matches(&[int_kind, float_kind, Str]) {
             let literal = token.literal.as_ref().unwrap();
-            Ok(Expr::from_literal(literal, token.location))
+            Ok(Expr::from_literal(literal, token.loc))
         } else if let Some(token) = self.matches(&[LeftParen]) {
             let expr = self.expression()?;
             self.consume(RightParen, Self::expected_close_paren_error)?;
-            Ok(Expr::groping(expr, token.location))
+            Ok(Expr::groping(expr, token.loc))
         } else {
             Err(self.expected_expression_error())
         }
@@ -189,16 +189,16 @@ impl<'a> Parser<'a> {
 
     fn expected_close_paren_error(&self) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedCloseParen(token.location, token.lexeme.to_string())
+        ParsingError::ExpectedCloseParen(token.loc, token.lexeme.to_string())
     }
 
     fn expected_expression_error(&self) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedExpression(token.location, token.lexeme.to_string())
+        ParsingError::ExpectedExpression(token.loc, token.lexeme.to_string())
     }
 
     fn expected_colon_error(&self) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedColon(token.location, token.lexeme.to_string())
+        ParsingError::ExpectedColon(token.loc, token.lexeme.to_string())
     }
 }

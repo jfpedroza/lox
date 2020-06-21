@@ -52,9 +52,9 @@ fn no_token(line: usize, column: usize) -> Vec<Token<'static>> {
 }
 
 fn one_token(token: Token) -> Vec<Token> {
-    let mut location = token.location;
-    location.column += token.lexeme.len();
-    vec![token, Token::eof(location)]
+    let mut loc = token.loc;
+    loc.column += token.lexeme.len();
+    vec![token, Token::eof(loc)]
 }
 
 #[test]
@@ -73,7 +73,7 @@ fn non_literal_token<'a>(
         kind,
         lexeme,
         literal: None,
-        location: Location::new(line, column),
+        loc: Location::new(line, column),
     }
 }
 
@@ -88,7 +88,7 @@ fn literal_token<'a>(
         kind,
         lexeme,
         literal: Some(literal),
-        location: Location::new(line, column),
+        loc: Location::new(line, column),
     }
 }
 
