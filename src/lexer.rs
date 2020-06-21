@@ -92,14 +92,11 @@ pub struct Scanner<'a> {
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum ScanningError {
-    #[fail(display = "[{}] Unrecognized character '{}'", location, character)]
-    UnrecognizedCharacter { character: char, location: Location },
-    #[fail(display = "[{}] Unterminated string", location)]
-    UnterminatedString { location: Location },
-    #[fail(display = "[{}] Invalid number {}", location, number)]
-    InvalidNumber { number: String, location: Location },
-    #[fail(display = "[{}] Unterminated block comment", location)]
-    UnterminatedBlockComment { location: Location },
+    UnrecognizedCharacter(char, Location),
+    UnterminatedString(Location),
+    InvalidNumber(String, Location),
+    UnterminatedBlockComment(Location),
+    Multiple(Vec<ScanningError>),
 }
 
 type TokenRes<'a> = Result<Token<'a>, ScanningError>;
@@ -149,29 +146,34 @@ impl<'a> Scanner<'a> {
 
     pub fn scan_tokens(&mut self) -> ScanningRes<'a> {
         let mut tokens: Vec<Token<'a>> = vec![];
+        let mut errors: Vec<ScanningError> = vec![];
         let mut token_res = self.scan_token();
 
         loop {
             match token_res {
                 Ok(Some(token)) => {
                     tokens.push(token);
-                    token_res = self.scan_token();
                 }
                 Ok(None) => {
                     if self.is_at_end() {
                         break;
                     }
-                    token_res = self.scan_token();
                 }
                 Err(error) => {
-                    // TODO: Accept multiple scanning errors
-                    return Err(error);
+                    errors.push(error);
                 }
             }
+            token_res = self.scan_token();
         }
 
-        tokens.push(Token::eof(self.current_location));
-        Ok(tokens)
+        match errors.len() {
+            0 => {
+                tokens.push(Token::eof(self.current_location));
+                Ok(tokens)
+            }
+            1 => Err(errors.pop().unwrap()),
+            _ => Err(ScanningError::Multiple(errors)),
+        }
     }
 
     fn scan_token(&mut self) -> Result<Option<Token<'a>>, ScanningError> {
@@ -258,7 +260,7 @@ impl<'a> Scanner<'a> {
 
     fn advance(&mut self) -> Option<char> {
         if let Some(ch) = self.chars.next() {
-            self.current += 1;
+            self.current += ch.len_utf8();
             self.current_location.advance();
             Some(ch)
         } else {
@@ -422,30 +424,43 @@ impl<'a> Scanner<'a> {
     }
 }
 
-fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
-    ScanningError::UnrecognizedCharacter {
-        character,
-        location: scanner.start_location,
+impl Display for ScanningError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use ScanningError::*;
+        match self {
+            UnrecognizedCharacter(character, location) => {
+                write!(f, "[{}] Unrecognized character '{}'", location, character)
+            }
+            UnterminatedString(location) => write!(f, "[{}] Unterminated string", location),
+            InvalidNumber(number, location) => {
+                write!(f, "[{}] Invalid number {}", location, number)
+            }
+            UnterminatedBlockComment(location) => {
+                write!(f, "[{}] Unterminated block comment", location)
+            }
+            Multiple(errors) => {
+                let error_string: String =
+                    errors.iter().map(|error| format!("\n{}", error)).collect();
+                write!(f, "Multiple errors encountered{}", error_string)
+            }
+        }
     }
+}
+
+fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
+    ScanningError::UnrecognizedCharacter(character, scanner.start_location)
 }
 
 fn unterminated_string(scanner: &Scanner) -> ScanningError {
-    ScanningError::UnterminatedString {
-        location: scanner.current_location,
-    }
+    ScanningError::UnterminatedString(scanner.current_location)
 }
 
 fn invalid_number(scanner: &Scanner, number: &str) -> ScanningError {
-    ScanningError::InvalidNumber {
-        number: String::from(number),
-        location: scanner.start_location,
-    }
+    ScanningError::InvalidNumber(String::from(number), scanner.start_location)
 }
 
 fn unterminated_block_comment(scanner: &Scanner) -> ScanningError {
-    ScanningError::UnterminatedBlockComment {
-        location: scanner.current_location,
-    }
+    ScanningError::UnterminatedBlockComment(scanner.current_location)
 }
 
 fn keyword_to_kind(keyword: &str) -> Option<TokenKind> {

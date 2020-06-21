@@ -329,10 +329,7 @@ fn test_big_input() {
 fn test_error1() {
     let tokens = get_tokens("invalid_character¬");
     assert_eq!(
-        Err(UnrecognizedCharacter {
-            character: '¬',
-            location: Location::new(0, 17),
-        }),
+        Err(UnrecognizedCharacter('¬', Location::new(0, 17))),
         tokens
     );
 }
@@ -340,22 +337,14 @@ fn test_error1() {
 #[test]
 fn test_error2() {
     let tokens = get_tokens("\"unterminated");
-    assert_eq!(
-        Err(UnterminatedString {
-            location: Location::new(0, 13)
-        }),
-        tokens
-    );
+    assert_eq!(Err(UnterminatedString(Location::new(0, 13))), tokens);
 }
 
 #[test]
 fn test_error3() {
     let tokens = get_tokens("var = 3\npi=3.14e+ - 8");
     assert_eq!(
-        Err(InvalidNumber {
-            number: std::string::String::from("3.14e+"),
-            location: Location::new(1, 3)
-        }),
+        Err(InvalidNumber(String::from("3.14e+"), Location::new(1, 3))),
         tokens
     );
 }
@@ -363,10 +352,19 @@ fn test_error3() {
 #[test]
 fn test_error4() {
     let tokens = get_tokens("/* /* */");
+    assert_eq!(Err(UnterminatedBlockComment(Location::new(0, 8))), tokens);
+}
+
+#[test]
+fn test_multiple_errors() {
+    let tokens = get_tokens("char ¬ hello ° 3e-\"string");
     assert_eq!(
-        Err(UnterminatedBlockComment {
-            location: Location::new(0, 8)
-        }),
+        Err(Multiple(vec![
+            UnrecognizedCharacter('¬', Location::new(0, 5)),
+            UnrecognizedCharacter('°', Location::new(0, 13)),
+            InvalidNumber(String::from("3e-"), Location::new(0, 15)),
+            UnterminatedString(Location::new(0, 25)),
+        ])),
         tokens
     );
 }
