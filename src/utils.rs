@@ -21,17 +21,11 @@ pub fn unescape_string(input: &str) -> String {
 }
 
 pub fn is_alpha(ch: char) -> bool {
-    match ch {
-        'a'..='z' | 'A'..='Z' | '_' => true,
-        _ => false,
-    }
+    matches!(ch, 'a'..='z' | 'A'..='Z' | '_')
 }
 
 pub fn is_digit(ch: char) -> bool {
-    match ch {
-        '0'..='9' => true,
-        _ => false,
-    }
+    matches!(ch, '0'..='9')
 }
 
 pub fn is_alphanumeric(ch: char) -> bool {

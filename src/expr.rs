@@ -1,15 +1,52 @@
+use crate::lexer::{Literal, TokenKind};
 use std::fmt;
 
-enum Expr {
+#[derive(PartialEq)]
+pub enum Expr {
     Literal(LiteralExpr),
     Unary(UnaryOp, Box<Expr>),
     Binary(Box<Expr>, BinaryOp, Box<Expr>),
     Grouping(Box<Expr>),
+    Comma(Box<Expr>, Box<Expr>),
+    Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
 }
 
 impl Expr {
-    fn integer(int: i64) -> Self {
-        Expr::Literal(LiteralExpr::Integer(int))
+    pub fn from_literal(literal: &Literal) -> Self {
+        use Literal::*;
+        Expr::Literal(match literal {
+            Integer(int) => LiteralExpr::Integer(*int),
+            Float(float) => LiteralExpr::Float(*float),
+            Str(string) => LiteralExpr::Str(string.clone()),
+        })
+    }
+
+    pub fn boolean(boolean: bool) -> Self {
+        Expr::Literal(LiteralExpr::Boolean(boolean))
+    }
+
+    pub fn nil() -> Self {
+        Expr::Literal(LiteralExpr::Nil)
+    }
+
+    pub fn unary(op: UnaryOp, right: Expr) -> Self {
+        Expr::Unary(op, Box::new(right))
+    }
+
+    pub fn binary(left: Expr, op: BinaryOp, right: Expr) -> Self {
+        Expr::Binary(Box::new(left), op, Box::new(right))
+    }
+
+    pub fn groping(expr: Expr) -> Self {
+        Expr::Grouping(Box::new(expr))
+    }
+
+    pub fn comma(left: Expr, right: Expr) -> Self {
+        Expr::Comma(Box::new(left), Box::new(right))
+    }
+
+    pub fn conditional(cond: Expr, left: Expr, right: Expr) -> Self {
+        Expr::Conditional(Box::new(cond), Box::new(left), Box::new(right))
     }
 }
 
@@ -21,6 +58,8 @@ impl fmt::Debug for Expr {
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
             Grouping(expr) => parenthesize("group", &[expr]),
+            Comma(left, right) => parenthesize("comma", &[left, right]),
+            Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
         };
 
         write!(f, "{}", string)
@@ -39,10 +78,11 @@ fn parenthesize(name: &str, exprs: &[&Expr]) -> String {
     parts.join("")
 }
 
-enum LiteralExpr {
+#[derive(PartialEq)]
+pub enum LiteralExpr {
     Integer(i64),
     Float(f64),
-    String(String),
+    Str(String),
     Boolean(bool),
     Nil,
 }
@@ -53,14 +93,15 @@ impl fmt::Display for LiteralExpr {
         match self {
             Integer(int) => write!(f, "{}", int),
             Float(float) => write!(f, "{}", float),
-            String(string) => write!(f, "{}", string),
+            Str(string) => write!(f, "{}", string),
             Boolean(boolean) => write!(f, "{}", boolean),
             Nil => write!(f, "nil"),
         }
     }
 }
 
-enum UnaryOp {
+#[derive(PartialEq)]
+pub enum UnaryOp {
     Negate,
     Not,
 }
@@ -75,7 +116,20 @@ impl UnaryOp {
     }
 }
 
-enum BinaryOp {
+impl From<TokenKind> for UnaryOp {
+    fn from(kind: TokenKind) -> Self {
+        use TokenKind::*;
+        use UnaryOp::*;
+        match kind {
+            Bang => Not,
+            Minus => Negate,
+            kind => panic!("Token kind '{:?}' is not a unary operator", kind),
+        }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum BinaryOp {
     Add,
     Sub,
     Mult,
@@ -108,24 +162,48 @@ impl BinaryOp {
     }
 }
 
+impl From<TokenKind> for BinaryOp {
+    fn from(kind: TokenKind) -> Self {
+        use TokenKind::*;
+        match kind {
+            Plus => BinaryOp::Add,
+            Minus => BinaryOp::Sub,
+            Star => BinaryOp::Mult,
+            Slash => BinaryOp::Div,
+            Percent => BinaryOp::Rem,
+            EqualEqual => BinaryOp::Equal,
+            BangEqual => BinaryOp::NotEqual,
+            Greater => BinaryOp::Greater,
+            GreaterEqual => BinaryOp::GreaterEqual,
+            Less => BinaryOp::Less,
+            LessEqual => BinaryOp::LessEqual,
+            kind => panic!("Token kind '{:?}' is not a binary operator", kind),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn integer_expr(int: i64) -> Expr {
+        Expr::Literal(LiteralExpr::Integer(int))
+    }
 
     #[test]
     fn test_debug() {
         // (1 + 2) * (4 - 3)
         let expr = Expr::Binary(
             Box::new(Expr::Grouping(Box::new(Expr::Binary(
-                Box::new(Expr::integer(1)),
+                Box::new(integer_expr(1)),
                 BinaryOp::Add,
-                Box::new(Expr::integer(2)),
+                Box::new(integer_expr(2)),
             )))),
             BinaryOp::Mult,
             Box::new(Expr::Grouping(Box::new(Expr::Binary(
-                Box::new(Expr::integer(4)),
+                Box::new(integer_expr(4)),
                 BinaryOp::Sub,
-                Box::new(Expr::integer(3)),
+                Box::new(integer_expr(3)),
             )))),
         );
         assert_eq!(format!("{:?}", expr), "(* (group (+ 1 2)) (group (- 4 3)))");

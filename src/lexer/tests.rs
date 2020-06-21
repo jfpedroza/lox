@@ -1,13 +1,15 @@
 use super::{ScanningError::*, TokenKind::*, *};
 use crate::location::Location;
 
-const LEXEME_KINDS: [(&str, TokenKind); 36] = [
+const LEXEME_KINDS: [(&str, TokenKind); 38] = [
     ("(", LeftParen),
     (")", RightParen),
     ("{", LeftBrace),
     ("}", RightBrace),
     (",", Comma),
     (".", Dot),
+    ("?", Question),
+    (":", Colon),
     ("-", Minus),
     ("+", Plus),
     (";", Semicolon),
@@ -40,6 +42,11 @@ const LEXEME_KINDS: [(&str, TokenKind); 36] = [
     ("while", While),
 ];
 
+fn get_tokens<'a>(input: &'a str) -> ScanningRes<'a> {
+    let mut scanner = Scanner::new(input);
+    scanner.scan_tokens()
+}
+
 fn no_token(line: usize, column: usize) -> Vec<Token<'static>> {
     vec![Token::eof(Location::new(line, column))]
 }
@@ -52,7 +59,7 @@ fn one_token(token: Token) -> Vec<Token> {
 
 #[test]
 fn test_empty_input() {
-    let tokens = Scanner::get_tokens("");
+    let tokens = get_tokens("");
     assert_eq!(Ok(no_token(0, 0)), tokens);
 }
 
@@ -86,18 +93,12 @@ fn literal_token<'a>(
 }
 
 fn string_token<'a>(lexeme: &'a str, literal: &'a str, line: usize, column: usize) -> Token<'a> {
-    literal_token(
-        TokenKind::String,
-        lexeme,
-        Literal::string(literal),
-        line,
-        column,
-    )
+    literal_token(Str, lexeme, Literal::string(literal), line, column)
 }
 
 fn integer_token<'a>(lexeme: &'a str, literal: i64, line: usize, column: usize) -> Token<'a> {
     literal_token(
-        TokenKind::Number(NumberKind::Integer),
+        Number(NumberKind::Integer),
         lexeme,
         Literal::Integer(literal),
         line,
@@ -107,7 +108,7 @@ fn integer_token<'a>(lexeme: &'a str, literal: i64, line: usize, column: usize) 
 
 fn float_token<'a>(lexeme: &'a str, literal: f64, line: usize, column: usize) -> Token<'a> {
     literal_token(
-        TokenKind::Number(NumberKind::Float),
+        Number(NumberKind::Float),
         lexeme,
         Literal::Float(literal),
         line,
@@ -118,7 +119,7 @@ fn float_token<'a>(lexeme: &'a str, literal: f64, line: usize, column: usize) ->
 #[test]
 fn test_single_token() {
     for (lexeme, kind) in LEXEME_KINDS.iter() {
-        let tokens = Scanner::get_tokens(lexeme);
+        let tokens = get_tokens(lexeme);
         let expected_token = non_literal_token(*kind, lexeme, 0, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }
@@ -126,7 +127,7 @@ fn test_single_token() {
 
 #[test]
 fn test_line_comment() {
-    let tokens = Scanner::get_tokens("// a line comment");
+    let tokens = get_tokens("// a line comment");
     assert_eq!(Ok(no_token(0, 17)), tokens);
 }
 
@@ -134,13 +135,13 @@ fn test_line_comment() {
 fn test_block_comment() {
     let input = r#"/* This is a block
         comment */"#;
-    let tokens = Scanner::get_tokens(input);
+    let tokens = get_tokens(input);
     assert_eq!(Ok(no_token(1, 18)), tokens);
 }
 
 #[test]
 fn test_multiple_tokens() {
-    let tokens = Scanner::get_tokens("(){},.-+;*!=!%===<=</>>=//this should be ignored");
+    let tokens = get_tokens("(){},.-+;*!=!%===<=</>>=?://this should be ignored");
     let expected_tokens = vec![
         non_literal_token(LeftParen, "(", 0, 0),
         non_literal_token(RightParen, ")", 0, 1),
@@ -162,7 +163,9 @@ fn test_multiple_tokens() {
         non_literal_token(Slash, "/", 0, 20),
         non_literal_token(Greater, ">", 0, 21),
         non_literal_token(GreaterEqual, ">=", 0, 22),
-        Token::eof(Location::new(0, 48)),
+        non_literal_token(Question, "?", 0, 24),
+        non_literal_token(Colon, ":", 0, 25),
+        Token::eof(Location::new(0, 50)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }
@@ -170,7 +173,7 @@ fn test_multiple_tokens() {
 #[test]
 fn test_string() {
     let input = r#""this is a string""#;
-    let tokens = Scanner::get_tokens(&input);
+    let tokens = get_tokens(&input);
     let expected_token = string_token(&input, "this is a string", 0, 0);
     assert_eq!(Ok(one_token(expected_token)), tokens);
 }
@@ -178,7 +181,7 @@ fn test_string() {
 #[test]
 fn test_string2() {
     let input = r#"("this is a string")"#;
-    let tokens = Scanner::get_tokens(&input);
+    let tokens = get_tokens(&input);
     let expected_tokens = vec![
         non_literal_token(LeftParen, "(", 0, 0),
         string_token(r#""this is a string""#, "this is a string", 0, 1),
@@ -191,7 +194,7 @@ fn test_string2() {
 #[test]
 fn test_escaped_string() {
     let input = r#""this\nis\ta \" string\\""#;
-    let tokens = Scanner::get_tokens(&input);
+    let tokens = get_tokens(&input);
     let expected_token = string_token(input, "this\nis\ta \" string\\", 0, 0);
     assert_eq!(Ok(one_token(expected_token)), tokens);
 }
@@ -199,7 +202,7 @@ fn test_escaped_string() {
 #[test]
 fn test_integer() {
     let input = "1234";
-    let tokens = Scanner::get_tokens(&input);
+    let tokens = get_tokens(&input);
     let expected_token = integer_token(input, 1234, 0, 0);
     assert_eq!(Ok(one_token(expected_token)), tokens);
 }
@@ -213,7 +216,7 @@ fn test_float() {
         ("1234.567e-2", 12.34567),
         ("12e12", 12e12),
     ] {
-        let tokens = Scanner::get_tokens(&input);
+        let tokens = get_tokens(&input);
         let expected_token = float_token(input, *output, 0, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }
@@ -230,8 +233,8 @@ fn test_identifier() {
         "CamelCase",
         "_underscore",
     ] {
-        let tokens = Scanner::get_tokens(&input);
-        let expected_token = non_literal_token(TokenKind::Identifier, input, 0, 0);
+        let tokens = get_tokens(&input);
+        let expected_token = non_literal_token(Identifier, input, 0, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }
 }
@@ -253,7 +256,7 @@ fn test_big_input() {
             2.sqrt()
         }
         "#;
-    let tokens = Scanner::get_tokens(&input);
+    let tokens = get_tokens(&input);
     let expected_tokens = vec![
         // 2nd line
         non_literal_token(Var, "var", 1, 8),
@@ -324,10 +327,10 @@ fn test_big_input() {
 
 #[test]
 fn test_error1() {
-    let tokens = Scanner::get_tokens("invalid_character?");
+    let tokens = get_tokens("invalid_character¬");
     assert_eq!(
         Err(UnrecognizedCharacter {
-            character: '?',
+            character: '¬',
             location: Location::new(0, 17),
         }),
         tokens
@@ -336,7 +339,7 @@ fn test_error1() {
 
 #[test]
 fn test_error2() {
-    let tokens = Scanner::get_tokens("\"unterminated");
+    let tokens = get_tokens("\"unterminated");
     assert_eq!(
         Err(UnterminatedString {
             location: Location::new(0, 13)
@@ -347,7 +350,7 @@ fn test_error2() {
 
 #[test]
 fn test_error3() {
-    let tokens = Scanner::get_tokens("var = 3\npi=3.14e+ - 8");
+    let tokens = get_tokens("var = 3\npi=3.14e+ - 8");
     assert_eq!(
         Err(InvalidNumber {
             number: std::string::String::from("3.14e+"),
@@ -359,7 +362,7 @@ fn test_error3() {
 
 #[test]
 fn test_error4() {
-    let tokens = Scanner::get_tokens("/* /* */");
+    let tokens = get_tokens("/* /* */");
     assert_eq!(
         Err(UnterminatedBlockComment {
             location: Location::new(0, 8)
