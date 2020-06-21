@@ -1,6 +1,7 @@
 use crate::lexer::{Literal, TokenKind};
 use std::fmt;
 
+#[derive(PartialEq)]
 pub enum Expr {
     Literal(LiteralExpr),
     Unary(UnaryOp, Box<Expr>),
@@ -77,6 +78,7 @@ fn parenthesize(name: &str, exprs: &[&Expr]) -> String {
     parts.join("")
 }
 
+#[derive(PartialEq)]
 pub enum LiteralExpr {
     Integer(i64),
     Float(f64),
@@ -98,6 +100,7 @@ impl fmt::Display for LiteralExpr {
     }
 }
 
+#[derive(PartialEq)]
 pub enum UnaryOp {
     Negate,
     Not,
@@ -118,13 +121,14 @@ impl From<TokenKind> for UnaryOp {
         use TokenKind::*;
         use UnaryOp::*;
         match kind {
-            Bang => Negate,
-            Minus => Not,
+            Bang => Not,
+            Minus => Negate,
             kind => panic!("Token kind '{:?}' is not a unary operator", kind),
         }
     }
 }
 
+#[derive(PartialEq)]
 pub enum BinaryOp {
     Add,
     Sub,

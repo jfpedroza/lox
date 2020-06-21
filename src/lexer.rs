@@ -174,11 +174,6 @@ impl<'a> Scanner<'a> {
         Ok(tokens)
     }
 
-    pub fn get_tokens(input: &'a str) -> ScanningRes<'a> {
-        let mut scanner = Scanner::new(input);
-        scanner.scan_tokens()
-    }
-
     fn scan_token(&mut self) -> Result<Option<Token<'a>>, ScanningError> {
         use TokenKind::*;
         self.skip_whitespace();
