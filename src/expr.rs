@@ -1,6 +1,6 @@
 use crate::lexer::{Literal, TokenKind};
 use crate::location::{Located, Location};
-use std::fmt;
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 #[derive(PartialEq)]
 pub enum ExprKind {
@@ -58,8 +58,8 @@ impl Expr {
     }
 }
 
-impl fmt::Debug for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use ExprKind::*;
         let string = match &self.kind {
             Literal(literal) => literal.to_string(),
@@ -95,8 +95,8 @@ pub enum LiteralExpr {
     Nil,
 }
 
-impl fmt::Display for LiteralExpr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for LiteralExpr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use LiteralExpr::*;
         match self {
             Integer(int) => write!(f, "{}", int),
@@ -140,7 +140,7 @@ impl From<TokenKind> for UnaryOp {
 pub enum BinaryOp {
     Add,
     Sub,
-    Mult,
+    Mul,
     Div,
     Rem,
     Equal,
@@ -157,7 +157,7 @@ impl BinaryOp {
         match self {
             Add => "+",
             Sub => "-",
-            Mult => "*",
+            Mul => "*",
             Div => "/",
             Rem => "%",
             Equal => "==",
@@ -176,7 +176,7 @@ impl From<TokenKind> for BinaryOp {
         match kind {
             Plus => BinaryOp::Add,
             Minus => BinaryOp::Sub,
-            Star => BinaryOp::Mult,
+            Star => BinaryOp::Mul,
             Slash => BinaryOp::Div,
             Percent => BinaryOp::Rem,
             EqualEqual => BinaryOp::Equal,

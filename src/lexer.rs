@@ -424,29 +424,6 @@ impl<'a> Scanner<'a> {
     }
 }
 
-impl Display for ScanningError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        use ScanningError::*;
-        match self {
-            UnrecognizedCharacter(character, location) => {
-                write!(f, "[{}] Unrecognized character '{}'", location, character)
-            }
-            UnterminatedString(location) => write!(f, "[{}] Unterminated string", location),
-            InvalidNumber(number, location) => {
-                write!(f, "[{}] Invalid number {}", location, number)
-            }
-            UnterminatedBlockComment(location) => {
-                write!(f, "[{}] Unterminated block comment", location)
-            }
-            Multiple(errors) => {
-                let error_string: String =
-                    errors.iter().map(|error| format!("\n{}", error)).collect();
-                write!(f, "Multiple errors encountered{}", error_string)
-            }
-        }
-    }
-}
-
 fn unrecognized_character(scanner: &Scanner, character: char) -> ScanningError {
     ScanningError::UnrecognizedCharacter(character, scanner.start_location)
 }
