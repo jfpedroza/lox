@@ -1,5 +1,5 @@
 use super::{ScanningError::*, TokenKind::*, *};
-use crate::location::Location;
+use crate::location::Loc;
 
 const LEXEME_KINDS: [(&str, TokenKind); 38] = [
     ("(", LeftParen),
@@ -48,7 +48,7 @@ fn get_tokens<'a>(input: &'a str) -> ScanningRes<'a> {
 }
 
 fn no_token(line: usize, column: usize) -> Vec<Token<'static>> {
-    vec![Token::eof(Location::new(line, column))]
+    vec![Token::eof(Loc::new(line, column))]
 }
 
 fn one_token(token: Token) -> Vec<Token> {
@@ -73,7 +73,7 @@ fn non_literal_token<'a>(
         kind,
         lexeme,
         literal: None,
-        loc: Location::new(line, column),
+        loc: Loc::new(line, column),
     }
 }
 
@@ -88,7 +88,7 @@ fn literal_token<'a>(
         kind,
         lexeme,
         literal: Some(literal),
-        loc: Location::new(line, column),
+        loc: Loc::new(line, column),
     }
 }
 
@@ -165,7 +165,7 @@ fn test_multiple_tokens() {
         non_literal_token(GreaterEqual, ">=", 0, 22),
         non_literal_token(Question, "?", 0, 24),
         non_literal_token(Colon, ":", 0, 25),
-        Token::eof(Location::new(0, 50)),
+        Token::eof(Loc::new(0, 50)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }
@@ -186,7 +186,7 @@ fn test_string2() {
         non_literal_token(LeftParen, "(", 0, 0),
         string_token(r#""this is a string""#, "this is a string", 0, 1),
         non_literal_token(RightParen, ")", 0, 19),
-        Token::eof(Location::new(0, 20)),
+        Token::eof(Loc::new(0, 20)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
 }
@@ -317,7 +317,7 @@ fn test_big_input() {
         // 14th line
         non_literal_token(RightBrace, "}", 13, 8),
         // End
-        Token::eof(Location::new(14, 8)),
+        Token::eof(Loc::new(14, 8)),
     ];
 
     for (i, token) in tokens.unwrap().into_iter().enumerate() {
@@ -328,23 +328,20 @@ fn test_big_input() {
 #[test]
 fn test_error1() {
     let tokens = get_tokens("invalid_character¬");
-    assert_eq!(
-        Err(UnrecognizedCharacter('¬', Location::new(0, 17))),
-        tokens
-    );
+    assert_eq!(Err(UnrecognizedCharacter('¬', Loc::new(0, 17))), tokens);
 }
 
 #[test]
 fn test_error2() {
     let tokens = get_tokens("\"unterminated");
-    assert_eq!(Err(UnterminatedString(Location::new(0, 13))), tokens);
+    assert_eq!(Err(UnterminatedString(Loc::new(0, 13))), tokens);
 }
 
 #[test]
 fn test_error3() {
     let tokens = get_tokens("var = 3\npi=3.14e+ - 8");
     assert_eq!(
-        Err(InvalidNumber(String::from("3.14e+"), Location::new(1, 3))),
+        Err(InvalidNumber(String::from("3.14e+"), Loc::new(1, 3))),
         tokens
     );
 }
@@ -352,7 +349,7 @@ fn test_error3() {
 #[test]
 fn test_error4() {
     let tokens = get_tokens("/* /* */");
-    assert_eq!(Err(UnterminatedBlockComment(Location::new(0, 8))), tokens);
+    assert_eq!(Err(UnterminatedBlockComment(Loc::new(0, 8))), tokens);
 }
 
 #[test]
@@ -360,10 +357,10 @@ fn test_multiple_errors() {
     let tokens = get_tokens("char ¬ hello ° 3e-\"string");
     assert_eq!(
         Err(Multiple(vec![
-            UnrecognizedCharacter('¬', Location::new(0, 5)),
-            UnrecognizedCharacter('°', Location::new(0, 13)),
-            InvalidNumber(String::from("3e-"), Location::new(0, 15)),
-            UnterminatedString(Location::new(0, 25)),
+            UnrecognizedCharacter('¬', Loc::new(0, 5)),
+            UnrecognizedCharacter('°', Loc::new(0, 13)),
+            InvalidNumber(String::from("3e-"), Loc::new(0, 15)),
+            UnterminatedString(Loc::new(0, 25)),
         ])),
         tokens
     );

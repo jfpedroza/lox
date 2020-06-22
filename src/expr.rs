@@ -1,12 +1,12 @@
 use crate::lexer::{Literal, TokenKind};
-use crate::location::{Located, Location};
+use crate::location::{Loc, Located};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 #[derive(PartialEq)]
 pub enum ExprKind {
-    Literal(LiteralExpr),
-    Unary(UnaryOp, Box<Expr>),
-    Binary(Box<Expr>, BinaryOp, Box<Expr>),
+    Literal(LitExpr),
+    Unary(UnOp, Box<Expr>),
+    Binary(Box<Expr>, BinOp, Box<Expr>),
     Grouping(Box<Expr>),
     Comma(Box<Expr>, Box<Expr>),
     Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
@@ -15,42 +15,42 @@ pub enum ExprKind {
 pub type Expr = Located<ExprKind>;
 
 impl Expr {
-    pub fn from_literal(literal: &Literal, loc: Location) -> Self {
+    pub fn from_literal(literal: &Literal, loc: Loc) -> Self {
         use Literal::*;
         let kind = ExprKind::Literal(match literal {
-            Integer(int) => LiteralExpr::Integer(*int),
-            Float(float) => LiteralExpr::Float(*float),
-            Str(string) => LiteralExpr::Str(string.clone()),
+            Integer(int) => LitExpr::Integer(*int),
+            Float(float) => LitExpr::Float(*float),
+            Str(string) => LitExpr::Str(string.clone()),
         });
 
         Expr::new(kind, loc)
     }
 
-    pub fn boolean(boolean: bool, loc: Location) -> Self {
-        Expr::new(ExprKind::Literal(LiteralExpr::Boolean(boolean)), loc)
+    pub fn boolean(boolean: bool, loc: Loc) -> Self {
+        Expr::new(ExprKind::Literal(LitExpr::Boolean(boolean)), loc)
     }
 
-    pub fn nil(loc: Location) -> Self {
-        Expr::new(ExprKind::Literal(LiteralExpr::Nil), loc)
+    pub fn nil(loc: Loc) -> Self {
+        Expr::new(ExprKind::Literal(LitExpr::Nil), loc)
     }
 
-    pub fn unary(op: UnaryOp, right: Expr, loc: Location) -> Self {
+    pub fn unary(op: UnOp, right: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Unary(op, Box::new(right)), loc)
     }
 
-    pub fn binary(left: Expr, op: BinaryOp, right: Expr, loc: Location) -> Self {
+    pub fn binary(left: Expr, op: BinOp, right: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Binary(Box::new(left), op, Box::new(right)), loc)
     }
 
-    pub fn groping(expr: Expr, loc: Location) -> Self {
+    pub fn groping(expr: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Grouping(Box::new(expr)), loc)
     }
 
-    pub fn comma(left: Expr, right: Expr, loc: Location) -> Self {
+    pub fn comma(left: Expr, right: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Comma(Box::new(left), Box::new(right)), loc)
     }
 
-    pub fn conditional(cond: Expr, left: Expr, right: Expr, loc: Location) -> Self {
+    pub fn conditional(cond: Expr, left: Expr, right: Expr, loc: Loc) -> Self {
         Expr::new(
             ExprKind::Conditional(Box::new(cond), Box::new(left), Box::new(right)),
             loc,
@@ -87,7 +87,7 @@ fn parenthesize(name: &str, exprs: &[&Expr]) -> String {
 }
 
 #[derive(PartialEq)]
-pub enum LiteralExpr {
+pub enum LitExpr {
     Integer(i64),
     Float(f64),
     Str(String),
@@ -95,9 +95,9 @@ pub enum LiteralExpr {
     Nil,
 }
 
-impl Display for LiteralExpr {
+impl Display for LitExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        use LiteralExpr::*;
+        use LitExpr::*;
         match self {
             Integer(int) => write!(f, "{}", int),
             Float(float) => write!(f, "{}", float),
@@ -109,14 +109,14 @@ impl Display for LiteralExpr {
 }
 
 #[derive(PartialEq)]
-pub enum UnaryOp {
+pub enum UnOp {
     Negate,
     Not,
 }
 
-impl UnaryOp {
+impl UnOp {
     fn to_string(&self) -> &'static str {
-        use UnaryOp::*;
+        use UnOp::*;
         match self {
             Negate => "-",
             Not => "!",
@@ -124,10 +124,10 @@ impl UnaryOp {
     }
 }
 
-impl From<TokenKind> for UnaryOp {
+impl From<TokenKind> for UnOp {
     fn from(kind: TokenKind) -> Self {
         use TokenKind::*;
-        use UnaryOp::*;
+        use UnOp::*;
         match kind {
             Bang => Not,
             Minus => Negate,
@@ -137,7 +137,7 @@ impl From<TokenKind> for UnaryOp {
 }
 
 #[derive(PartialEq)]
-pub enum BinaryOp {
+pub enum BinOp {
     Add,
     Sub,
     Mul,
@@ -151,9 +151,9 @@ pub enum BinaryOp {
     LessEqual,
 }
 
-impl BinaryOp {
+impl BinOp {
     fn to_string(&self) -> &'static str {
-        use BinaryOp::*;
+        use BinOp::*;
         match self {
             Add => "+",
             Sub => "-",
@@ -170,21 +170,21 @@ impl BinaryOp {
     }
 }
 
-impl From<TokenKind> for BinaryOp {
+impl From<TokenKind> for BinOp {
     fn from(kind: TokenKind) -> Self {
         use TokenKind::*;
         match kind {
-            Plus => BinaryOp::Add,
-            Minus => BinaryOp::Sub,
-            Star => BinaryOp::Mul,
-            Slash => BinaryOp::Div,
-            Percent => BinaryOp::Rem,
-            EqualEqual => BinaryOp::Equal,
-            BangEqual => BinaryOp::NotEqual,
-            Greater => BinaryOp::Greater,
-            GreaterEqual => BinaryOp::GreaterEqual,
-            Less => BinaryOp::Less,
-            LessEqual => BinaryOp::LessEqual,
+            Plus => BinOp::Add,
+            Minus => BinOp::Sub,
+            Star => BinOp::Mul,
+            Slash => BinOp::Div,
+            Percent => BinOp::Rem,
+            EqualEqual => BinOp::Equal,
+            BangEqual => BinOp::NotEqual,
+            Greater => BinOp::Greater,
+            GreaterEqual => BinOp::GreaterEqual,
+            Less => BinOp::Less,
+            LessEqual => BinOp::LessEqual,
             kind => panic!("Token kind '{:?}' is not a binary operator", kind),
         }
     }
@@ -196,17 +196,17 @@ mod tests {
 
     fn int_expr(int: i64, (line, col): (usize, usize)) -> Expr {
         Expr::new(
-            ExprKind::Literal(LiteralExpr::Integer(int)),
-            Location::new(line, col),
+            ExprKind::Literal(LitExpr::Integer(int)),
+            Loc::new(line, col),
         )
     }
 
-    fn binary_expr(left: Expr, op: BinaryOp, right: Expr, (line, col): (usize, usize)) -> Expr {
-        Expr::binary(left, op, right, Location::new(line, col))
+    fn binary_expr(left: Expr, op: BinOp, right: Expr, (line, col): (usize, usize)) -> Expr {
+        Expr::binary(left, op, right, Loc::new(line, col))
     }
 
     fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-        Expr::groping(expr, Location::new(line, col))
+        Expr::groping(expr, Loc::new(line, col))
     }
 
     #[test]
@@ -214,19 +214,14 @@ mod tests {
         // (1 + 2) * (4 - 3)
         let expr = binary_expr(
             group_expr(
-                binary_expr(
-                    int_expr(1, (0, 1)),
-                    BinaryOp::Add,
-                    int_expr(2, (0, 5)),
-                    (0, 3),
-                ),
+                binary_expr(int_expr(1, (0, 1)), BinOp::Add, int_expr(2, (0, 5)), (0, 3)),
                 (0, 0),
             ),
-            BinaryOp::Mult,
+            BinOp::Mult,
             group_expr(
                 binary_expr(
                     int_expr(4, (0, 11)),
-                    BinaryOp::Sub,
+                    BinOp::Sub,
                     int_expr(3, (0, 15)),
                     (0, 13),
                 ),

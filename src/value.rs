@@ -1,4 +1,4 @@
-use crate::expr::LiteralExpr;
+use crate::expr::LitExpr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(PartialEq, Clone)]
@@ -19,8 +19,8 @@ pub mod types {
 }
 
 impl Value {
-    pub fn from_literal(literal: &LiteralExpr) -> Self {
-        use LiteralExpr::*;
+    pub fn from_literal(literal: &LitExpr) -> Self {
+        use LitExpr::*;
         match literal {
             Integer(int) => Value::Integer(*int),
             Float(float) => Value::Float(*float),

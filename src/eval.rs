@@ -1,5 +1,5 @@
-use crate::expr::{BinaryOp, Expr, ExprKind, UnaryOp};
-use crate::location::Location;
+use crate::expr::{BinOp, Expr, ExprKind, UnOp};
+use crate::location::Loc;
 use crate::value::Value;
 
 pub struct Interpreter;
@@ -7,14 +7,14 @@ pub struct Interpreter;
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
     #[fail(display = "[{}] Unsupported operand for {}: '{}'", _0, _1, 2)]
-    UnsupportedOperand(Location, String, String),
+    UnsupportedOperand(Loc, String, String),
     #[fail(
         display = "[{}] Unsupported operands for {}: '{}' and '{}'",
         _0, _1, 2, _3
     )]
-    UnsupportedOperands(Location, String, String, String),
+    UnsupportedOperands(Loc, String, String, String),
     #[fail(display = "[{}] Division or modulo by zero", _0)]
-    DivisionByZero(Location),
+    DivisionByZero(Loc),
 }
 
 type ValueRes = Result<Value, RuntimeError>;
@@ -50,8 +50,8 @@ impl Evaluable<Value> for Expr {
                 let val = expr.evaluate(inter)?;
 
                 match op {
-                    UnaryOp::Negate => val.negate(self.loc)?,
-                    UnaryOp::Not => val.not(),
+                    UnOp::Negate => val.negate(self.loc)?,
+                    UnOp::Not => val.not(),
                 }
             }
             Binary(left, op, right) => {
@@ -59,17 +59,17 @@ impl Evaluable<Value> for Expr {
                 let right_val = right.evaluate(inter)?;
 
                 match op {
-                    BinaryOp::Add => left_val.add(right_val, self.loc)?,
-                    BinaryOp::Sub => left_val.sub(right_val, self.loc)?,
-                    BinaryOp::Mul => left_val.mul(right_val, self.loc)?,
-                    BinaryOp::Div => left_val.div(right_val, self.loc)?,
-                    BinaryOp::Rem => left_val.rem(right_val, self.loc)?,
-                    BinaryOp::Equal => left_val.equal(right_val),
-                    BinaryOp::NotEqual => left_val.not_eq(right_val),
-                    BinaryOp::Greater => left_val.greater(right_val, self.loc)?,
-                    BinaryOp::GreaterEqual => left_val.greater_eq(right_val, self.loc)?,
-                    BinaryOp::Less => left_val.less(right_val, self.loc)?,
-                    BinaryOp::LessEqual => left_val.less_eq(right_val, self.loc)?,
+                    BinOp::Add => left_val.add(right_val, self.loc)?,
+                    BinOp::Sub => left_val.sub(right_val, self.loc)?,
+                    BinOp::Mul => left_val.mul(right_val, self.loc)?,
+                    BinOp::Div => left_val.div(right_val, self.loc)?,
+                    BinOp::Rem => left_val.rem(right_val, self.loc)?,
+                    BinOp::Equal => left_val.equal(right_val),
+                    BinOp::NotEqual => left_val.not_eq(right_val),
+                    BinOp::Greater => left_val.greater(right_val, self.loc)?,
+                    BinOp::GreaterEqual => left_val.greater_eq(right_val, self.loc)?,
+                    BinOp::Less => left_val.less(right_val, self.loc)?,
+                    BinOp::LessEqual => left_val.less_eq(right_val, self.loc)?,
                 }
             }
             Comma(left, right) => {
@@ -129,7 +129,7 @@ impl Value {
         Value::Boolean(!self.is_truthy())
     }
 
-    fn negate(self, loc: Location) -> ValueRes {
+    fn negate(self, loc: Loc) -> ValueRes {
         match self {
             Value::Integer(int) => Ok(Value::Integer(-int)),
             Value::Float(float) => Ok(Value::Float(-float)),
@@ -137,7 +137,7 @@ impl Value {
         }
     }
 
-    fn add(self, rhs: Value, loc: Location) -> ValueRes {
+    fn add(self, rhs: Value, loc: Loc) -> ValueRes {
         use Value::*;
         match (self, rhs) {
             (Integer(left), Integer(right)) => Ok(Integer(left + right)),
@@ -149,15 +149,15 @@ impl Value {
         }
     }
 
-    fn sub(self, rhs: Value, loc: Location) -> ValueRes {
+    fn sub(self, rhs: Value, loc: Loc) -> ValueRes {
         arithmethic_operation!(-, self, rhs, loc);
     }
 
-    fn mul(self, rhs: Value, loc: Location) -> ValueRes {
+    fn mul(self, rhs: Value, loc: Loc) -> ValueRes {
         arithmethic_operation!(*, self, rhs, loc);
     }
 
-    fn div(self, rhs: Value, loc: Location) -> ValueRes {
+    fn div(self, rhs: Value, loc: Loc) -> ValueRes {
         if rhs.number() == Some(0.0) {
             return Err(RuntimeError::DivisionByZero(loc));
         }
@@ -165,7 +165,7 @@ impl Value {
         arithmethic_operation!(/, self, rhs, loc);
     }
 
-    fn rem(self, rhs: Value, loc: Location) -> ValueRes {
+    fn rem(self, rhs: Value, loc: Loc) -> ValueRes {
         if rhs.number() == Some(0.0) {
             return Err(RuntimeError::DivisionByZero(loc));
         }
@@ -191,29 +191,29 @@ impl Value {
         self.equal(rhs).not()
     }
 
-    fn greater(self, rhs: Value, loc: Location) -> ValueRes {
+    fn greater(self, rhs: Value, loc: Loc) -> ValueRes {
         comparison_operation!(>, self, rhs, loc);
     }
 
-    fn greater_eq(self, rhs: Value, loc: Location) -> ValueRes {
+    fn greater_eq(self, rhs: Value, loc: Loc) -> ValueRes {
         comparison_operation!(>=, self, rhs, loc);
     }
 
-    fn less(self, rhs: Value, loc: Location) -> ValueRes {
+    fn less(self, rhs: Value, loc: Loc) -> ValueRes {
         comparison_operation!(<, self, rhs, loc);
     }
 
-    fn less_eq(self, rhs: Value, loc: Location) -> ValueRes {
+    fn less_eq(self, rhs: Value, loc: Loc) -> ValueRes {
         comparison_operation!(<=, self, rhs, loc);
     }
 }
 
 impl RuntimeError {
-    fn unsupported_operand(loc: Location, op: &str, val: Value) -> Self {
+    fn unsupported_operand(loc: Loc, op: &str, val: Value) -> Self {
         Self::UnsupportedOperand(loc, String::from(op), String::from(val.get_type()))
     }
 
-    fn unsupported_operands(loc: Location, op: &str, left: Value, right: Value) -> Self {
+    fn unsupported_operands(loc: Loc, op: &str, left: Value, right: Value) -> Self {
         Self::UnsupportedOperands(
             loc,
             String::from(op),

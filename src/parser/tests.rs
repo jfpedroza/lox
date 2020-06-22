@@ -1,7 +1,7 @@
 use super::*;
-use crate::expr::{BinaryOp, Expr, ExprKind, LiteralExpr, UnaryOp};
+use crate::expr::{BinOp, Expr, ExprKind, LitExpr, UnOp};
 use crate::lexer::{Scanner, Token};
-use crate::location::Location;
+use crate::location::Loc;
 
 fn get_tokens<'a>(input: &'a str) -> Vec<Token<'a>> {
     let mut scanner = Scanner::new(input);
@@ -323,7 +323,7 @@ fn test_missing_close_paren() {
     let mut parser = Parser::new(&tokens);
     assert_eq!(
         Err(ParsingError::ExpectedCloseParen(
-            Location::new(0, 4),
+            Loc::new(0, 4),
             String::from("EOF")
         )),
         parser.expression()
@@ -336,7 +336,7 @@ fn test_missing_colon() {
     let mut parser = Parser::new(&tokens);
     assert_eq!(
         Err(ParsingError::ExpectedColon(
-            Location::new(0, 10),
+            Loc::new(0, 10),
             String::from(";")
         )),
         parser.expression()
@@ -349,7 +349,7 @@ fn test_expected_expression() {
     let mut parser = Parser::new(&tokens);
     assert_eq!(
         Err(ParsingError::ExpectedExpression(
-            Location::new(0, 0),
+            Loc::new(0, 0),
             String::from("if")
         )),
         parser.expression()
@@ -358,104 +358,96 @@ fn test_expected_expression() {
 
 fn int_expr(int: i64, (line, col): (usize, usize)) -> Expr {
     Expr::new(
-        ExprKind::Literal(LiteralExpr::Integer(int)),
-        Location::new(line, col),
+        ExprKind::Literal(LitExpr::Integer(int)),
+        Loc::new(line, col),
     )
 }
 
 fn float_expr(float: f64, (line, col): (usize, usize)) -> Expr {
     Expr::new(
-        ExprKind::Literal(LiteralExpr::Float(float)),
-        Location::new(line, col),
+        ExprKind::Literal(LitExpr::Float(float)),
+        Loc::new(line, col),
     )
 }
 
 fn str_expr(string: &str, (line, col): (usize, usize)) -> Expr {
     Expr::new(
-        ExprKind::Literal(LiteralExpr::Str(String::from(string))),
-        Location::new(line, col),
+        ExprKind::Literal(LitExpr::Str(String::from(string))),
+        Loc::new(line, col),
     )
 }
 
 fn bool_expr(boolean: bool, (line, col): (usize, usize)) -> Expr {
     Expr::new(
-        ExprKind::Literal(LiteralExpr::Boolean(boolean)),
-        Location::new(line, col),
+        ExprKind::Literal(LitExpr::Boolean(boolean)),
+        Loc::new(line, col),
     )
 }
 
 fn nil_expr((line, col): (usize, usize)) -> Expr {
-    Expr::new(
-        ExprKind::Literal(LiteralExpr::Nil),
-        Location::new(line, col),
-    )
+    Expr::new(ExprKind::Literal(LitExpr::Nil), Loc::new(line, col))
 }
 
 fn not_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::unary(UnaryOp::Not, expr, Location::new(line, col))
+    Expr::unary(UnOp::Not, expr, Loc::new(line, col))
 }
 
 fn neg_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::unary(UnaryOp::Negate, expr, Location::new(line, col))
+    Expr::unary(UnOp::Negate, expr, Loc::new(line, col))
 }
 
 fn add_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Add, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Add, right, Loc::new(line, col))
 }
 
 fn sub_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Sub, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Sub, right, Loc::new(line, col))
 }
 
 fn mult_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Mult, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Mult, right, Loc::new(line, col))
 }
 
 fn div_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Div, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Div, right, Loc::new(line, col))
 }
 
 fn rem_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Rem, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Rem, right, Loc::new(line, col))
 }
 
 fn eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Equal, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Equal, right, Loc::new(line, col))
 }
 
 fn not_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::NotEqual, right, Location::new(line, col))
+    Expr::binary(left, BinOp::NotEqual, right, Loc::new(line, col))
 }
 
 fn gt_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Greater, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Greater, right, Loc::new(line, col))
 }
 
 fn gt_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(
-        left,
-        BinaryOp::GreaterEqual,
-        right,
-        Location::new(line, col),
-    )
+    Expr::binary(left, BinOp::GreaterEqual, right, Loc::new(line, col))
 }
 
 fn less_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::Less, right, Location::new(line, col))
+    Expr::binary(left, BinOp::Less, right, Loc::new(line, col))
 }
 
 fn less_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::binary(left, BinaryOp::LessEqual, right, Location::new(line, col))
+    Expr::binary(left, BinOp::LessEqual, right, Loc::new(line, col))
 }
 
 fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::groping(expr, Location::new(line, col))
+    Expr::groping(expr, Loc::new(line, col))
 }
 
 fn comma_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::comma(left, right, Location::new(line, col))
+    Expr::comma(left, right, Loc::new(line, col))
 }
 
 fn cond_expr(cond: Expr, left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::conditional(cond, left, right, Location::new(line, col))
+    Expr::conditional(cond, left, right, Loc::new(line, col))
 }

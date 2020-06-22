@@ -6,7 +6,7 @@ use crate::lexer::{
     NumberKind, Token,
     TokenKind::{self, *},
 };
-use crate::location::Location;
+use crate::location::Loc;
 
 pub struct Parser<'a> {
     input: &'a [Token<'a>],
@@ -16,14 +16,14 @@ pub struct Parser<'a> {
 #[derive(Debug, PartialEq, Fail)]
 pub enum ParsingError {
     #[fail(display = "[{}] Expected expression. Got {}", _0, _1)]
-    ExpectedExpression(Location, String),
+    ExpectedExpression(Loc, String),
     #[fail(display = "[{}] Exptected ')' after expression. Got {}", _0, _1)]
-    ExpectedCloseParen(Location, String),
+    ExpectedCloseParen(Loc, String),
     #[fail(
         display = "[{}] Exptected ':' for conditional expression. Got {}",
         _0, _1
     )]
-    ExpectedColon(Location, String),
+    ExpectedColon(Loc, String),
 }
 
 type TokenRef<'a> = &'a Token<'a>;
