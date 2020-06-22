@@ -19,17 +19,6 @@ pub mod types {
 }
 
 impl Value {
-    pub fn from_literal(literal: &LitExpr) -> Self {
-        use LitExpr::*;
-        match literal {
-            Integer(int) => Value::Integer(*int),
-            Float(float) => Value::Float(*float),
-            Str(string) => Value::Str(string.clone()),
-            Boolean(boolean) => Value::Boolean(*boolean),
-            Nil => Value::Nil,
-        }
-    }
-
     pub fn is_truthy(&self) -> bool {
         use Value::*;
         match self {
@@ -54,6 +43,19 @@ impl Value {
             Str(_) => types::STRING,
             Boolean(_) => types::BOOL,
             Nil => types::NIL,
+        }
+    }
+}
+
+impl From<LitExpr> for Value {
+    fn from(literal: LitExpr) -> Self {
+        use LitExpr::*;
+        match literal {
+            Integer(int) => Value::Integer(int),
+            Float(float) => Value::Float(float),
+            Str(string) => Value::Str(string),
+            Boolean(boolean) => Value::Boolean(boolean),
+            Nil => Value::Nil,
         }
     }
 }

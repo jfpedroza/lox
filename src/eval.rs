@@ -22,7 +22,7 @@ type ValueRes = Result<Value, RuntimeError>;
 trait Evaluable<Res> {
     type Error;
 
-    fn evaluate(&self, inter: &mut Interpreter) -> Result<Res, Self::Error>;
+    fn evaluate(self, inter: &mut Interpreter) -> Result<Res, Self::Error>;
 }
 
 impl Interpreter {
@@ -30,7 +30,7 @@ impl Interpreter {
         Interpreter
     }
 
-    pub fn interpret(&mut self, expr: &Expr) -> Result<(), RuntimeError> {
+    pub fn interpret(&mut self, expr: Expr) -> Result<(), RuntimeError> {
         let val = expr.evaluate(self)?;
 
         println!("{}", val);
@@ -41,10 +41,10 @@ impl Interpreter {
 impl Evaluable<Value> for Expr {
     type Error = RuntimeError;
 
-    fn evaluate(&self, inter: &mut Interpreter) -> Result<Value, Self::Error> {
+    fn evaluate(self, inter: &mut Interpreter) -> Result<Value, Self::Error> {
         use ExprKind::*;
-        Ok(match &self.kind {
-            Literal(literal) => Value::from_literal(literal),
+        Ok(match self.kind {
+            Literal(literal) => literal.into(),
             Grouping(expr) => expr.evaluate(inter)?,
             Unary(op, expr) => {
                 let val = expr.evaluate(inter)?;

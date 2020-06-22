@@ -24,7 +24,7 @@ pub fn run(input: &str) -> Fallible<()> {
     let expr = parser.parse()?;
 
     let mut interpreter = Interpreter::new();
-    interpreter.interpret(&expr)?;
+    interpreter.interpret(expr)?;
 
     Ok(())
 }
