@@ -1,6 +1,7 @@
 extern crate lox;
 
-use failure::{Error, Fallible, ResultExt};
+use failure::{Fallible, ResultExt};
+use lox::error::*;
 use lox::*;
 use rustyline::{config::Configurer, error::ReadlineError, Editor};
 use std::ffi::OsStr;
@@ -20,9 +21,9 @@ fn main() {
 
     match res {
         Ok(()) => (),
-        Err(err) => {
+        Err(ref err) => {
             print_err(err);
-            std::process::exit(65);
+            std::process::exit(exit_code(err));
         }
     }
 }
@@ -56,7 +57,7 @@ fn run_prompt() -> Fallible<()> {
             Ok(line) if line.is_empty() => (),
             Ok(line) => match run(&line) {
                 Ok(()) => (),
-                Err(err) => print_err(err),
+                Err(err) => print_err(&err),
             },
             Err(ReadlineError::Interrupted) => (),
             Err(ReadlineError::Eof) => break,
@@ -65,13 +66,4 @@ fn run_prompt() -> Fallible<()> {
     }
 
     Ok(())
-}
-
-fn print_err(err: Error) {
-    let mut fail = err.as_fail();
-    eprintln!("Error: {}", fail);
-    while let Some(cause) = fail.cause() {
-        eprintln!("> {}", cause);
-        fail = cause;
-    }
 }

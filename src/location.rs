@@ -1,14 +1,14 @@
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub struct Location {
+pub struct Loc {
     pub line: usize,
     pub column: usize,
 }
 
-impl Location {
+impl Loc {
     pub fn new(line: usize, column: usize) -> Self {
-        Location { line, column }
+        Loc { line, column }
     }
 
     pub fn advance(&mut self) {
@@ -21,7 +21,7 @@ impl Location {
     }
 }
 
-impl Display for Location {
+impl Display for Loc {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "{}:{}", self.line + 1, self.column)
     }
@@ -30,11 +30,11 @@ impl Display for Location {
 #[derive(PartialEq)]
 pub struct Located<T: PartialEq> {
     pub kind: T,
-    pub loc: Location,
+    pub loc: Loc,
 }
 
 impl<T: PartialEq> Located<T> {
-    pub fn new(kind: T, loc: Location) -> Self {
+    pub fn new(kind: T, loc: Loc) -> Self {
         Self { kind, loc }
     }
 }
