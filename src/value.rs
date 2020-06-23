@@ -1,7 +1,7 @@
 use crate::expr::LitExpr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug)]
 pub enum Value {
     Integer(i64),
     Float(f64),

@@ -8,6 +8,8 @@ mod expr;
 mod lexer;
 mod location;
 mod parser;
+#[cfg(test)]
+mod test_utils;
 mod utils;
 mod value;
 

@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::expr::{BinOp, Expr, ExprKind, UnOp};
 use crate::location::Loc;
 use crate::value::Value;
@@ -64,12 +67,12 @@ impl Evaluable<Value> for Expr {
                     BinOp::Mul => left_val.mul(right_val, self.loc)?,
                     BinOp::Div => left_val.div(right_val, self.loc)?,
                     BinOp::Rem => left_val.rem(right_val, self.loc)?,
-                    BinOp::Equal => left_val.equal(right_val),
-                    BinOp::NotEqual => left_val.not_eq(right_val),
-                    BinOp::Greater => left_val.greater(right_val, self.loc)?,
-                    BinOp::GreaterEqual => left_val.greater_eq(right_val, self.loc)?,
-                    BinOp::Less => left_val.less(right_val, self.loc)?,
-                    BinOp::LessEqual => left_val.less_eq(right_val, self.loc)?,
+                    BinOp::Equal => left_val.equal(&right_val),
+                    BinOp::NotEqual => left_val.not_eq(&right_val),
+                    BinOp::Greater => left_val.greater(&right_val, self.loc)?,
+                    BinOp::GreaterEqual => left_val.greater_eq(&right_val, self.loc)?,
+                    BinOp::Less => left_val.less(&right_val, self.loc)?,
+                    BinOp::LessEqual => left_val.less_eq(&right_val, self.loc)?,
                 }
             }
             Comma(left, right) => {
@@ -99,8 +102,8 @@ macro_rules! arithmethic_operation {
             (left, right) => Err(RuntimeError::unsupported_operands(
                 $loc,
                 stringify!($op),
-                left,
-                right,
+                &left,
+                &right,
             )),
         }
     };
@@ -111,8 +114,8 @@ macro_rules! comparison_operation {
         use Value::*;
         return match ($lhs, $rhs) {
             (Integer(left), Integer(right)) => Ok(Boolean(left $op right)),
-            (Integer(left), Float(right)) => Ok(Boolean((left as f64) $op right)),
-            (Float(left), Integer(right)) => Ok(Boolean(left $op (right as f64))),
+            (Integer(left), Float(right)) => Ok(Boolean((*left as f64) $op *right)),
+            (Float(left), Integer(right)) => Ok(Boolean(*left $op (*right as f64))),
             (Float(left), Float(right)) => Ok(Boolean(left $op right)),
             (left, right) => Err(RuntimeError::unsupported_operands(
                 $loc,
@@ -145,7 +148,7 @@ impl Value {
             (Float(left), Integer(right)) => Ok(Float(left + (right as f64))),
             (Float(left), Float(right)) => Ok(Float(left + right)),
             (Str(left), Str(right)) => Ok(Str(format!("{}{}", left, right))),
-            (left, right) => Err(RuntimeError::unsupported_operands(loc, "+", left, right)),
+            (left, right) => Err(RuntimeError::unsupported_operands(loc, "+", &left, &right)),
         }
     }
 
@@ -173,13 +176,16 @@ impl Value {
         arithmethic_operation!(%, self, rhs, loc);
     }
 
-    fn equal(self, rhs: Value) -> Value {
+    fn equal(&self, rhs: &Value) -> Value {
+        use std::f64::EPSILON;
         use Value::*;
+        let eq = |l: f64, r: f64| (l - r).abs() <= EPSILON * 64.0;
+
         Boolean(match (self, rhs) {
             (Integer(left), Integer(right)) => left == right,
-            (Integer(left), Float(right)) => (left as f64) == right,
-            (Float(left), Integer(right)) => left == (right as f64),
-            (Float(left), Float(right)) => left == right,
+            (Integer(left), Float(right)) => eq(*left as f64, *right),
+            (Float(left), Integer(right)) => eq(*left, *right as f64),
+            (Float(left), Float(right)) => eq(*left, *right),
             (Str(left), Str(right)) => left == right,
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
@@ -187,23 +193,23 @@ impl Value {
         })
     }
 
-    fn not_eq(self, rhs: Value) -> Value {
+    fn not_eq(&self, rhs: &Value) -> Value {
         self.equal(rhs).not()
     }
 
-    fn greater(self, rhs: Value, loc: Loc) -> ValueRes {
+    fn greater(&self, rhs: &Value, loc: Loc) -> ValueRes {
         comparison_operation!(>, self, rhs, loc);
     }
 
-    fn greater_eq(self, rhs: Value, loc: Loc) -> ValueRes {
+    fn greater_eq(&self, rhs: &Value, loc: Loc) -> ValueRes {
         comparison_operation!(>=, self, rhs, loc);
     }
 
-    fn less(self, rhs: Value, loc: Loc) -> ValueRes {
+    fn less(&self, rhs: &Value, loc: Loc) -> ValueRes {
         comparison_operation!(<, self, rhs, loc);
     }
 
-    fn less_eq(self, rhs: Value, loc: Loc) -> ValueRes {
+    fn less_eq(&self, rhs: &Value, loc: Loc) -> ValueRes {
         comparison_operation!(<=, self, rhs, loc);
     }
 }
@@ -213,7 +219,7 @@ impl RuntimeError {
         Self::UnsupportedOperand(loc, String::from(op), String::from(val.get_type()))
     }
 
-    fn unsupported_operands(loc: Loc, op: &str, left: Value, right: Value) -> Self {
+    fn unsupported_operands(loc: Loc, op: &str, left: &Value, right: &Value) -> Self {
         Self::UnsupportedOperands(
             loc,
             String::from(op),

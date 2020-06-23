@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
         self.matches(&[kind]).ok_or_else(|| err_fn(self))
     }
 
-    fn expression(&mut self) -> ExprParseRes {
+    pub fn expression(&mut self) -> ExprParseRes {
         let expr = self.conditional()?;
         if let Some(token) = self.matches(&[Comma]) {
             let right = self.expression()?;

@@ -216,7 +216,7 @@ fn test_float() {
         ("1234.567e-2", 12.34567),
         ("12e12", 12e12),
     ] {
-        let tokens = get_tokens(&input);
+        let tokens = get_tokens(input);
         let expected_token = float_token(input, *output, 0, 0);
         assert_eq!(Ok(one_token(expected_token)), tokens);
     }

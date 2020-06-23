@@ -192,39 +192,18 @@ impl From<TokenKind> for BinOp {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn int_expr(int: i64, (line, col): (usize, usize)) -> Expr {
-        Expr::new(
-            ExprKind::Literal(LitExpr::Integer(int)),
-            Loc::new(line, col),
-        )
-    }
-
-    fn binary_expr(left: Expr, op: BinOp, right: Expr, (line, col): (usize, usize)) -> Expr {
-        Expr::binary(left, op, right, Loc::new(line, col))
-    }
-
-    fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-        Expr::groping(expr, Loc::new(line, col))
-    }
+    use crate::test_utils::*;
 
     #[test]
     fn test_debug() {
         // (1 + 2) * (4 - 3)
-        let expr = binary_expr(
+        let expr = mult_expr(
             group_expr(
-                binary_expr(int_expr(1, (0, 1)), BinOp::Add, int_expr(2, (0, 5)), (0, 3)),
+                add_expr(int_expr(1, (0, 1)), int_expr(2, (0, 5)), (0, 3)),
                 (0, 0),
             ),
-            BinOp::Mult,
             group_expr(
-                binary_expr(
-                    int_expr(4, (0, 11)),
-                    BinOp::Sub,
-                    int_expr(3, (0, 15)),
-                    (0, 13),
-                ),
+                sub_expr(int_expr(4, (0, 11)), int_expr(3, (0, 15)), (0, 13)),
                 (0, 10),
             ),
             (0, 8),
