@@ -3,6 +3,7 @@ mod tests;
 
 use crate::expr::{BinOp, Expr, ExprKind, UnOp};
 use crate::location::Loc;
+use crate::stmt::{Stmt, StmtKind};
 use crate::value::Value;
 
 pub struct Interpreter;
@@ -33,10 +34,11 @@ impl Interpreter {
         Interpreter
     }
 
-    pub fn interpret(&mut self, expr: Expr) -> Result<(), RuntimeError> {
-        let val = expr.evaluate(self)?;
+    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<(), RuntimeError> {
+        for stmt in stmts {
+            stmt.evaluate(self)?;
+        }
 
-        println!("{}", val);
         Ok(())
     }
 }
@@ -86,6 +88,23 @@ impl Evaluable<Value> for Expr {
                 } else {
                     right.evaluate(inter)?
                 }
+            }
+        })
+    }
+}
+
+impl Evaluable<()> for Stmt {
+    type Error = RuntimeError;
+
+    fn evaluate(self, inter: &mut Interpreter) -> Result<(), Self::Error> {
+        use StmtKind::*;
+        Ok(match self.kind {
+            Expression(expr) => {
+                expr.evaluate(inter)?;
+            }
+            Print(expr) => {
+                let val = expr.evaluate(inter)?;
+                println!("{}", val);
             }
         })
     }

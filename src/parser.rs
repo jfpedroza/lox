@@ -7,6 +7,7 @@ use crate::lexer::{
     TokenKind::{self, *},
 };
 use crate::location::Loc;
+use crate::stmt::Stmt;
 
 pub struct Parser<'a> {
     input: &'a [Token<'a>],
@@ -24,20 +25,29 @@ pub enum ParsingError {
         _0, _1
     )]
     ExpectedColon(Loc, String),
+    #[fail(display = "[{}] Exptected ';' after {}. Got {}", _0, _1, _2)]
+    ExpectedSemicolon(Loc, String, String),
 }
 
 type TokenRef<'a> = &'a Token<'a>;
 type OptTokenRef<'a> = Option<&'a Token<'a>>;
 type TokenRefRes<'a> = Result<&'a Token<'a>, ParsingError>;
 type ExprParseRes = Result<Expr, ParsingError>;
+type StmtParseRes = Result<Stmt, ParsingError>;
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a [Token<'a>]) -> Self {
         Parser { input, current: 0 }
     }
 
-    pub fn parse(&mut self) -> ExprParseRes {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParsingError> {
+        let mut stmts = Vec::new();
+
+        while !self.is_at_end() {
+            stmts.push(self.statement()?);
+        }
+
+        Ok(stmts)
     }
 
     fn is_at_end(&self) -> bool {
@@ -83,6 +93,28 @@ impl<'a> Parser<'a> {
         F: FnOnce(&Parser<'a>) -> ParsingError,
     {
         self.matches(&[kind]).ok_or_else(|| err_fn(self))
+    }
+
+    fn statement(&mut self) -> StmtParseRes {
+        if self.matches(&[Print]).is_some() {
+            return self.print_statement();
+        }
+
+        self.expression_statement()
+    }
+
+    fn print_statement(&mut self) -> StmtParseRes {
+        let expr = self.expression()?;
+        let Token { loc, .. } = self.previous();
+        self.consume(Semicolon, |p| p.expected_semicolon_error("value"))?;
+        Ok(Stmt::print(expr, *loc))
+    }
+
+    fn expression_statement(&mut self) -> StmtParseRes {
+        let expr = self.expression()?;
+        self.consume(Semicolon, |p| p.expected_semicolon_error("expression"))?;
+        let loc = expr.loc;
+        Ok(Stmt::expression(expr, loc))
     }
 
     pub fn expression(&mut self) -> ExprParseRes {
@@ -200,5 +232,10 @@ impl<'a> Parser<'a> {
     fn expected_colon_error(&self) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedColon(token.loc, token.lexeme.to_string())
+    }
+
+    fn expected_semicolon_error(&self, after: &str) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedSemicolon(token.loc, String::from(after), token.lexeme.to_string())
     }
 }

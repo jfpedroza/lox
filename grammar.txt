@@ -1,3 +1,11 @@
+program        → statement* EOF ;
+
+statement      → exprStmt
+               | printStmt ;
+
+exprStmt       → expression ";" ;
+printStmt      → "print" expression ";" ;
+
 expression     → conditional ( "," expression )? ;
 conditional    → equality ( "?" expression : conditional )? ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;

@@ -8,6 +8,7 @@ mod expr;
 mod lexer;
 mod location;
 mod parser;
+mod stmt;
 #[cfg(test)]
 mod test_utils;
 mod utils;
@@ -23,10 +24,10 @@ pub fn run(input: &str) -> Fallible<()> {
     let tokens = scanner.scan_tokens()?;
 
     let mut parser = Parser::new(&tokens);
-    let expr = parser.parse()?;
+    let stmts = parser.parse()?;
 
     let mut interpreter = Interpreter::new();
-    interpreter.interpret(expr)?;
+    interpreter.interpret(stmts)?;
 
     Ok(())
 }
