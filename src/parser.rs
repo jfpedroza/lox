@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::Expr;
+use crate::expr::{Expr, ExprKind};
 use crate::lexer::{
     NumberKind, Token,
     TokenKind::{self, *},
@@ -18,15 +18,19 @@ pub struct Parser<'a> {
 pub enum ParsingError {
     #[fail(display = "[{}] Expected expression. Got {}", _0, _1)]
     ExpectedExpression(Loc, String),
-    #[fail(display = "[{}] Exptected ')' after expression. Got {}", _0, _1)]
+    #[fail(display = "[{}] Expected ')' after expression. Got {}", _0, _1)]
     ExpectedCloseParen(Loc, String),
     #[fail(
-        display = "[{}] Exptected ':' for conditional expression. Got {}",
+        display = "[{}] Expected ':' for conditional expression. Got {}",
         _0, _1
     )]
     ExpectedColon(Loc, String),
-    #[fail(display = "[{}] Exptected ';' after {}. Got {}", _0, _1, _2)]
+    #[fail(display = "[{}] Expected ';' after {}. Got {}", _0, _1, _2)]
     ExpectedSemicolon(Loc, String, String),
+    #[fail(display = "[{}] Expected variable name. Got {}", _0, _1)]
+    ExpectedVarName(Loc, String),
+    #[fail(display = "[{}] Invalid assignment target", _0)]
+    InvalidAssignmentTarget(Loc),
 }
 
 type TokenRef<'a> = &'a Token<'a>;
@@ -44,7 +48,7 @@ impl<'a> Parser<'a> {
         let mut stmts = Vec::new();
 
         while !self.is_at_end() {
-            stmts.push(self.statement()?);
+            stmts.push(self.declaration()?);
         }
 
         Ok(stmts)
@@ -95,6 +99,14 @@ impl<'a> Parser<'a> {
         self.matches(&[kind]).ok_or_else(|| err_fn(self))
     }
 
+    fn declaration(&mut self) -> StmtParseRes {
+        if self.matches(&[Var]).is_some() {
+            return self.var_declaration();
+        }
+
+        self.statement()
+    }
+
     fn statement(&mut self) -> StmtParseRes {
         if self.matches(&[Print]).is_some() {
             return self.print_statement();
@@ -104,10 +116,26 @@ impl<'a> Parser<'a> {
     }
 
     fn print_statement(&mut self) -> StmtParseRes {
-        let expr = self.expression()?;
         let Token { loc, .. } = self.previous();
+        let expr = self.expression()?;
         self.consume(Semicolon, |p| p.expected_semicolon_error("value"))?;
         Ok(Stmt::print(expr, *loc))
+    }
+
+    fn var_declaration(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        let name = self.consume(Identifier, Self::expected_var_name_error)?;
+        let init = if self.matches(&[Equal]).is_some() {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Semicolon, |p| {
+            p.expected_semicolon_error("variable declaration")
+        })?;
+
+        Ok(Stmt::var(name.lexeme, init, *loc))
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {
@@ -118,13 +146,29 @@ impl<'a> Parser<'a> {
     }
 
     pub fn expression(&mut self) -> ExprParseRes {
-        let expr = self.conditional()?;
+        let expr = self.assignment()?;
         if let Some(token) = self.matches(&[Comma]) {
             let right = self.expression()?;
             Ok(Expr::comma(expr, right, token.loc))
         } else {
             Ok(expr)
         }
+    }
+
+    fn assignment(&mut self) -> ExprParseRes {
+        let expr = self.conditional()?;
+
+        if let Some(token) = self.matches(&[Equal]) {
+            let value = self.expression()?;
+
+            if let ExprKind::Variable(name) = expr.kind {
+                return Ok(Expr::assign(name, value, expr.loc));
+            } else {
+                return Err(ParsingError::InvalidAssignmentTarget(token.loc));
+            }
+        }
+
+        Ok(expr)
     }
 
     fn conditional(&mut self) -> ExprParseRes {
@@ -198,6 +242,8 @@ impl<'a> Parser<'a> {
             let expr = self.expression()?;
             self.consume(RightParen, Self::expected_close_paren_error)?;
             Ok(Expr::groping(expr, token.loc))
+        } else if let Some(token) = self.matches(&[Identifier]) {
+            Ok(Expr::variable(token.lexeme, token.loc))
         } else {
             Err(self.expected_expression_error())
         }
@@ -237,5 +283,10 @@ impl<'a> Parser<'a> {
     fn expected_semicolon_error(&self, after: &str) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedSemicolon(token.loc, String::from(after), token.lexeme.to_string())
+    }
+
+    fn expected_var_name_error(&self) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedVarName(token.loc, token.lexeme.to_string())
     }
 }

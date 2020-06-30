@@ -5,8 +5,19 @@ use crate::expr::{BinOp, Expr, ExprKind, UnOp};
 use crate::location::Loc;
 use crate::stmt::{Stmt, StmtKind};
 use crate::value::Value;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
 
-pub struct Interpreter;
+pub struct Interpreter {
+    env: Env,
+}
+
+struct Environ {
+    values: HashMap<String, Value>,
+}
+
+type Env = Rc<RefCell<Environ>>;
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
@@ -19,6 +30,8 @@ pub enum RuntimeError {
     UnsupportedOperands(Loc, String, String, String),
     #[fail(display = "[{}] Division or modulo by zero", _0)]
     DivisionByZero(Loc),
+    #[fail(display = "[{}] Undefined variable '{}'", _0, _1)]
+    UndefinedVariable(Loc, String),
 }
 
 type ValueRes = Result<Value, RuntimeError>;
@@ -31,7 +44,9 @@ trait Evaluable<Res> {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter
+        Interpreter {
+            env: Environ::new().to_rc(),
+        }
     }
 
     pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<(), RuntimeError> {
@@ -43,10 +58,44 @@ impl Interpreter {
     }
 }
 
+impl Environ {
+    pub fn new() -> Self {
+        Environ {
+            values: HashMap::new(),
+        }
+    }
+
+    pub fn to_rc(self) -> Env {
+        Rc::new(RefCell::new(self))
+    }
+
+    pub fn define(&mut self, name: String, val: Value) {
+        self.values.insert(name, val);
+    }
+
+    pub fn get(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
+        if let Some(val) = self.values.get(name) {
+            Ok(val.clone())
+        } else {
+            Err(RuntimeError::undefined_variable(loc, name))
+        }
+    }
+
+    pub fn assign(&mut self, name: String, val: Value, loc: Loc) -> Result<(), RuntimeError> {
+        if self.values.contains_key(&name) {
+            self.values.insert(name, val);
+
+            Ok(())
+        } else {
+            Err(RuntimeError::undefined_variable(loc, &name))
+        }
+    }
+}
+
 impl Evaluable<Value> for Expr {
     type Error = RuntimeError;
 
-    fn evaluate(self, inter: &mut Interpreter) -> Result<Value, Self::Error> {
+    fn evaluate(self, inter: &mut Interpreter) -> ValueRes {
         use ExprKind::*;
         Ok(match self.kind {
             Literal(literal) => literal.into(),
@@ -89,6 +138,13 @@ impl Evaluable<Value> for Expr {
                     right.evaluate(inter)?
                 }
             }
+            Variable(name) => inter.env.borrow().get(&name, self.loc)?,
+            Assign(name, expr) => {
+                let val = expr.evaluate(inter)?;
+                let cloned_val = val.clone();
+                inter.env.borrow_mut().assign(name, val, self.loc)?;
+                cloned_val
+            }
         })
     }
 }
@@ -105,6 +161,15 @@ impl Evaluable<()> for Stmt {
             Print(expr) => {
                 let val = expr.evaluate(inter)?;
                 println!("{}", val);
+            }
+            Var(name, init) => {
+                let init_val = if let Some(expr) = init {
+                    expr.evaluate(inter)?
+                } else {
+                    Value::Nil
+                };
+
+                inter.env.borrow_mut().define(name, init_val);
             }
         })
     }
@@ -245,5 +310,9 @@ impl RuntimeError {
             String::from(left.get_type()),
             String::from(right.get_type()),
         )
+    }
+
+    fn undefined_variable(loc: Loc, name: &str) -> Self {
+        Self::UndefinedVariable(loc, String::from(name))
     }
 }

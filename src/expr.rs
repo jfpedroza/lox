@@ -10,6 +10,8 @@ pub enum ExprKind {
     Grouping(Box<Expr>),
     Comma(Box<Expr>, Box<Expr>),
     Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
+    Variable(String),
+    Assign(String, Box<Expr>),
 }
 
 pub type Expr = Located<ExprKind>;
@@ -56,6 +58,14 @@ impl Expr {
             loc,
         )
     }
+
+    pub fn variable(name: &str, loc: Loc) -> Self {
+        Expr::new(ExprKind::Variable(String::from(name)), loc)
+    }
+
+    pub fn assign(name: String, expr: Expr, loc: Loc) -> Self {
+        Expr::new(ExprKind::Assign(name, Box::new(expr)), loc)
+    }
 }
 
 impl Debug for Expr {
@@ -68,6 +78,8 @@ impl Debug for Expr {
             Grouping(expr) => parenthesize("group", &[expr]),
             Comma(left, right) => parenthesize("comma", &[left, right]),
             Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
+            Variable(name) => format!("(var {})", name),
+            Assign(name, expr) => format!("(= {} {:?})", name, expr),
         };
 
         write!(f, "{}[{}]", string, self.loc)
