@@ -37,7 +37,8 @@ pub enum TokenKind {
     // Literals
     Identifier,
     Str,
-    Number(NumberKind),
+    Integer,
+    Float,
 
     // Keywords
     And,
@@ -58,12 +59,6 @@ pub enum TokenKind {
     While,
 
     EOF,
-}
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum NumberKind {
-    Integer,
-    Float,
 }
 
 #[derive(PartialEq, Debug)]
@@ -351,11 +346,11 @@ impl<'a> Scanner<'a> {
             self.advance_while(is_digit);
         }
 
-        let kind = TokenKind::Number(if is_float {
-            NumberKind::Float
+        let kind = if is_float {
+            TokenKind::Float
         } else {
-            NumberKind::Integer
-        });
+            TokenKind::Integer
+        };
 
         let lexeme = self.get_lexeme();
 

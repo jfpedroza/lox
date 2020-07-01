@@ -3,7 +3,7 @@ mod tests;
 
 use crate::expr::{Expr, ExprKind};
 use crate::lexer::{
-    NumberKind, Token,
+    Token,
     TokenKind::{self, *},
 };
 use crate::location::Loc;
@@ -226,16 +226,13 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> ExprParseRes {
-        let int_kind = Number(NumberKind::Integer);
-        let float_kind = Number(NumberKind::Float);
-
         if let Some(token) = self.matches(&[False]) {
             Ok(Expr::boolean(false, token.loc))
         } else if let Some(token) = self.matches(&[True]) {
             Ok(Expr::boolean(true, token.loc))
         } else if let Some(token) = self.matches(&[Nil]) {
             Ok(Expr::nil(token.loc))
-        } else if let Some(token) = self.matches(&[int_kind, float_kind, Str]) {
+        } else if let Some(token) = self.matches(&[Integer, Float, Str]) {
             let literal = token.literal.as_ref().unwrap();
             Ok(Expr::from_literal(literal, token.loc))
         } else if let Some(token) = self.matches(&[LeftParen]) {
