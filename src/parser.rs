@@ -226,24 +226,27 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> ExprParseRes {
-        if let Some(token) = self.matches(&[False]) {
-            Ok(Expr::boolean(false, token.loc))
-        } else if let Some(token) = self.matches(&[True]) {
-            Ok(Expr::boolean(true, token.loc))
-        } else if let Some(token) = self.matches(&[Nil]) {
-            Ok(Expr::nil(token.loc))
-        } else if let Some(token) = self.matches(&[Integer, Float, Str]) {
-            let literal = token.literal.as_ref().unwrap();
-            Ok(Expr::from_literal(literal, token.loc))
-        } else if let Some(token) = self.matches(&[LeftParen]) {
-            let expr = self.expression()?;
-            self.consume(RightParen, Self::expected_close_paren_error)?;
-            Ok(Expr::groping(expr, token.loc))
-        } else if let Some(token) = self.matches(&[Identifier]) {
-            Ok(Expr::variable(token.lexeme, token.loc))
-        } else {
-            Err(self.expected_expression_error())
-        }
+        let primary_tokens = [False, True, Nil, Integer, Float, Str, LeftParen, Identifier];
+        let token = self
+            .matches(&primary_tokens)
+            .ok_or_else(|| self.expected_expression_error())?;
+
+        Ok(match token.kind {
+            False => Expr::boolean(false, token.loc),
+            True => Expr::boolean(true, token.loc),
+            Nil => Expr::nil(token.loc),
+            Integer | Float | Str => {
+                let literal = token.literal.as_ref().unwrap();
+                Expr::from_literal(literal, token.loc)
+            }
+            LeftParen => {
+                let expr = self.expression()?;
+                self.consume(RightParen, Self::expected_close_paren_error)?;
+                Expr::groping(expr, token.loc)
+            }
+            Identifier => Expr::variable(token.lexeme, token.loc),
+            kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
+        })
     }
 
     fn synchronize(&mut self) {
