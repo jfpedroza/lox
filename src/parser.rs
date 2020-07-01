@@ -12,25 +12,18 @@ use crate::stmt::Stmt;
 pub struct Parser<'a> {
     input: &'a [Token<'a>],
     current: usize,
+    errors: Vec<ParsingError>,
 }
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum ParsingError {
-    #[fail(display = "[{}] Expected expression. Got {}", _0, _1)]
     ExpectedExpression(Loc, String),
-    #[fail(display = "[{}] Expected ')' after expression. Got {}", _0, _1)]
     ExpectedCloseParen(Loc, String),
-    #[fail(
-        display = "[{}] Expected ':' for conditional expression. Got {}",
-        _0, _1
-    )]
     ExpectedColon(Loc, String),
-    #[fail(display = "[{}] Expected ';' after {}. Got {}", _0, _1, _2)]
     ExpectedSemicolon(Loc, String, String),
-    #[fail(display = "[{}] Expected variable name. Got {}", _0, _1)]
     ExpectedVarName(Loc, String),
-    #[fail(display = "[{}] Invalid assignment target", _0)]
     InvalidAssignmentTarget(Loc),
+    Multiple(Vec<ParsingError>),
 }
 
 type TokenRef<'a> = &'a Token<'a>;
@@ -41,7 +34,11 @@ type StmtParseRes = Result<Stmt, ParsingError>;
 
 impl<'a> Parser<'a> {
     pub fn new(input: &'a [Token<'a>]) -> Self {
-        Parser { input, current: 0 }
+        Parser {
+            input,
+            current: 0,
+            errors: vec![],
+        }
     }
 
     pub fn parse(&mut self) -> Result<Vec<Stmt>, ParsingError> {
@@ -51,7 +48,15 @@ impl<'a> Parser<'a> {
             stmts.push(self.declaration()?);
         }
 
-        Ok(stmts)
+        match self.errors.len() {
+            0 => Ok(stmts),
+            1 => Err(self.errors.pop().unwrap()),
+            len => {
+                let mut errors = Vec::with_capacity(len);
+                errors.append(&mut self.errors);
+                Err(ParsingError::Multiple(errors))
+            }
+        }
     }
 
     fn is_at_end(&self) -> bool {
@@ -100,11 +105,18 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> StmtParseRes {
-        if self.matches(&[Var]).is_some() {
-            return self.var_declaration();
-        }
+        let res = if self.matches(&[Var]).is_some() {
+            self.var_declaration()
+        } else {
+            self.statement()
+        };
 
-        self.statement()
+        res.or_else(|err| {
+            self.errors.push(err);
+            self.synchronize();
+            // Returns a dummy nil;
+            Ok(Stmt::expression(Expr::nil(Loc::new(0, 0)), Loc::new(0, 0)))
+        })
     }
 
     fn statement(&mut self) -> StmtParseRes {
@@ -164,7 +176,8 @@ impl<'a> Parser<'a> {
             if let ExprKind::Variable(name) = expr.kind {
                 return Ok(Expr::assign(name, value, expr.loc));
             } else {
-                return Err(ParsingError::InvalidAssignmentTarget(token.loc));
+                self.errors
+                    .push(ParsingError::InvalidAssignmentTarget(token.loc));
             }
         }
 

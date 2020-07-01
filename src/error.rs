@@ -55,3 +55,30 @@ impl Display for ScanningError {
         }
     }
 }
+
+impl Display for ParsingError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use ParsingError::*;
+        match self {
+            ExpectedExpression(loc, got) => write!(f, "[{}] Expected expression. Got {}", loc, got),
+            ExpectedCloseParen(loc, got) => {
+                write!(f, "[{}] Expected ')' after expression. Got {}", loc, got)
+            }
+            ExpectedColon(loc, got) => write!(
+                f,
+                "[{}] Expected ':' for conditional expression. Got {}",
+                loc, got
+            ),
+            ExpectedSemicolon(loc, after, got) => {
+                write!(f, "[{}] Expected ';' after {}. Got {}", loc, after, got)
+            }
+            ExpectedVarName(loc, got) => write!(f, "[{}] Expected variable name. Got {}", loc, got),
+            InvalidAssignmentTarget(loc) => write!(f, "[{}] Invalid assignment target", loc),
+            Multiple(errors) => {
+                let error_string: String =
+                    errors.iter().map(|error| format!("\n{}", error)).collect();
+                write!(f, "Multiple errors encountered{}", error_string)
+            }
+        }
+    }
+}
