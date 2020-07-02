@@ -23,6 +23,7 @@ use rustyline::{config::Configurer, error::ReadlineError, Editor};
 use std::ffi::OsStr;
 use std::io::{stdin, Read};
 use std::path::Path;
+use stmt::{Stmt, StmtKind};
 
 pub struct Lox {
     inter: Interpreter,
@@ -74,7 +75,7 @@ impl Lox {
         loop {
             match rl.readline("\x1b[1;34mlox\x1b[0m> ") {
                 Ok(line) if line.is_empty() => (),
-                Ok(line) => match self.run(&line) {
+                Ok(line) => match self.run_prompt_line(&line) {
                     Ok(()) => (),
                     Err(err) => print_err(&err),
                 },
@@ -82,6 +83,34 @@ impl Lox {
                 Err(ReadlineError::Eof) => break,
                 Err(err) => return Err(err.into()),
             }
+        }
+
+        Ok(())
+    }
+
+    fn run_prompt_line(&mut self, input: &str) -> Fallible<()> {
+        let mut scanner = Scanner::new(input);
+        let tokens = scanner.scan_tokens()?;
+
+        let mut parser = Parser::new(&tokens);
+        parser.allow_expression = true;
+        let mut stmts = parser.parse()?;
+
+        if stmts.len() == 1 {
+            match stmts.pop().unwrap() {
+                Stmt {
+                    kind: StmtKind::Expression(expr),
+                    ..
+                } => {
+                    let val = self.inter.evaluate(expr)?;
+                    println!("=> {}", val);
+                }
+                stmt => {
+                    self.inter.execute(stmt)?;
+                }
+            }
+        } else {
+            self.inter.interpret(stmts)?;
         }
 
         Ok(())

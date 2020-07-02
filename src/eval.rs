@@ -36,6 +36,7 @@ pub enum RuntimeError {
 }
 
 type ValueRes = Result<Value, RuntimeError>;
+type ExecuteRes = Result<(), RuntimeError>;
 
 trait Evaluable<Res> {
     type Error;
@@ -50,20 +51,28 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> Result<(), RuntimeError> {
+    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> ExecuteRes {
         for stmt in stmts {
-            stmt.evaluate(self)?;
+            self.execute(stmt)?;
         }
 
         Ok(())
     }
 
-    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Env) -> Result<(), RuntimeError> {
+    pub fn evaluate<T: Into<Expr>>(&mut self, expr: T) -> ValueRes {
+        expr.into().evaluate(self)
+    }
+
+    pub fn execute<T: Into<Stmt>>(&mut self, stmt: T) -> ExecuteRes {
+        stmt.into().evaluate(self)
+    }
+
+    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Env) -> ExecuteRes {
         let prev = Rc::clone(&self.env);
         self.env = env;
 
         for stmt in stmts {
-            match stmt.evaluate(self) {
+            match self.execute(stmt) {
                 Ok(()) => (),
                 Err(err) => {
                     self.env = prev;
@@ -132,9 +141,9 @@ impl Evaluable<Value> for Expr {
         use ExprKind::*;
         Ok(match self.kind {
             Literal(literal) => literal.into(),
-            Grouping(expr) => expr.evaluate(inter)?,
+            Grouping(expr) => inter.evaluate(expr)?,
             Unary(op, expr) => {
-                let val = expr.evaluate(inter)?;
+                let val = inter.evaluate(expr)?;
 
                 match op {
                     UnOp::Negate => val.negate(self.loc)?,
@@ -142,8 +151,8 @@ impl Evaluable<Value> for Expr {
                 }
             }
             Binary(left, op, right) => {
-                let left_val = left.evaluate(inter)?;
-                let right_val = right.evaluate(inter)?;
+                let left_val = inter.evaluate(left)?;
+                let right_val = inter.evaluate(right)?;
 
                 match op {
                     BinOp::Add => left_val.add(right_val, self.loc)?,
@@ -160,20 +169,20 @@ impl Evaluable<Value> for Expr {
                 }
             }
             Comma(left, right) => {
-                let _ = left.evaluate(inter)?;
-                right.evaluate(inter)?
+                let _ = inter.evaluate(left)?;
+                inter.evaluate(right)?
             }
             Conditional(cond, left, right) => {
-                let cond_val = cond.evaluate(inter)?;
+                let cond_val = inter.evaluate(cond)?;
                 if cond_val.is_truthy() {
-                    left.evaluate(inter)?
+                    inter.evaluate(left)?
                 } else {
-                    right.evaluate(inter)?
+                    inter.evaluate(right)?
                 }
             }
             Variable(name) => inter.env.borrow().get(&name, self.loc)?,
             Assign(name, expr) => {
-                let val = expr.evaluate(inter)?;
+                let val = inter.evaluate(expr)?;
                 let cloned_val = val.clone();
                 inter.env.borrow_mut().assign(name, val, self.loc)?;
                 cloned_val
@@ -189,15 +198,15 @@ impl Evaluable<()> for Stmt {
         use StmtKind::*;
         Ok(match self.kind {
             Expression(expr) => {
-                expr.evaluate(inter)?;
+                inter.evaluate(expr)?;
             }
             Print(expr) => {
-                let val = expr.evaluate(inter)?;
+                let val = inter.evaluate(expr)?;
                 println!("{}", val);
             }
             Var(name, init) => {
                 let init_val = if let Some(expr) = init {
-                    expr.evaluate(inter)?
+                    inter.evaluate(expr)?
                 } else {
                     Value::Nil
                 };

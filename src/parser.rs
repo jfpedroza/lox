@@ -13,6 +13,8 @@ pub struct Parser<'a> {
     input: &'a [Token<'a>],
     current: usize,
     errors: Vec<ParsingError>,
+    pub allow_expression: bool,
+    found_expression: bool,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -39,6 +41,8 @@ impl<'a> Parser<'a> {
             input,
             current: 0,
             errors: vec![],
+            allow_expression: false,
+            found_expression: false,
         }
     }
 
@@ -47,6 +51,11 @@ impl<'a> Parser<'a> {
 
         while !self.is_at_end() {
             stmts.push(self.declaration()?);
+            if self.found_expression {
+                break;
+            }
+
+            self.allow_expression = false;
         }
 
         match self.errors.len() {
@@ -167,7 +176,12 @@ impl<'a> Parser<'a> {
 
     fn expression_statement(&mut self) -> StmtParseRes {
         let expr = self.expression()?;
-        self.consume(Semicolon, |p| p.expected_semicolon_error("expression"))?;
+        if self.allow_expression && self.is_at_end() {
+            self.found_expression = true;
+        } else {
+            self.consume(Semicolon, |p| p.expected_semicolon_error("expression"))?;
+        }
+
         let loc = expr.loc;
         Ok(Stmt::expression(expr, loc))
     }
