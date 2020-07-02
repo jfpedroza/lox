@@ -19,6 +19,7 @@ pub struct Parser<'a> {
 pub enum ParsingError {
     ExpectedExpression(Loc, String),
     ExpectedCloseParen(Loc, String),
+    ExpectedCloseBrace(Loc, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
     ExpectedVarName(Loc, String),
@@ -122,6 +123,8 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> StmtParseRes {
         if self.matches(&[Print]).is_some() {
             return self.print_statement();
+        } else if let Some(token) = self.matches(&[LeftBrace]) {
+            return Ok(Stmt::block(self.block()?, token.loc));
         }
 
         self.expression_statement()
@@ -132,6 +135,18 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(Semicolon, |p| p.expected_semicolon_error("value"))?;
         Ok(Stmt::print(expr, *loc))
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>, ParsingError> {
+        let mut stmts = Vec::new();
+
+        while !self.check(RightBrace) && !self.is_at_end() {
+            stmts.push(self.declaration()?);
+        }
+
+        self.consume(RightBrace, Self::expected_close_brace_error)?;
+
+        Ok(stmts)
     }
 
     fn var_declaration(&mut self) -> StmtParseRes {
@@ -281,6 +296,11 @@ impl<'a> Parser<'a> {
     fn expected_close_paren_error(&self) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedCloseParen(token.loc, token.lexeme.to_string())
+    }
+
+    fn expected_close_brace_error(&self) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedCloseBrace(token.loc, token.lexeme.to_string())
     }
 
     fn expected_expression_error(&self) -> ParsingError {

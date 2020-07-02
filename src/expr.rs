@@ -68,10 +68,10 @@ impl Expr {
     }
 }
 
-impl Debug for Expr {
+impl Debug for ExprKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use ExprKind::*;
-        let string = match &self.kind {
+        let string = match &self {
             Literal(literal) => literal.to_string(),
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
@@ -82,7 +82,7 @@ impl Debug for Expr {
             Assign(name, expr) => format!("(= {} {:?})", name, expr),
         };
 
-        write!(f, "{}[{}]", string, self.loc)
+        write!(f, "{}", string)
     }
 }
 

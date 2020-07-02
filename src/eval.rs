@@ -15,6 +15,7 @@ pub struct Interpreter {
 
 struct Environ {
     values: HashMap<String, Value>,
+    enclosing: Option<Env>,
 }
 
 type Env = Rc<RefCell<Environ>>;
@@ -56,13 +57,41 @@ impl Interpreter {
 
         Ok(())
     }
+
+    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Env) -> Result<(), RuntimeError> {
+        let prev = Rc::clone(&self.env);
+        self.env = env;
+
+        for stmt in stmts {
+            match stmt.evaluate(self) {
+                Ok(()) => (),
+                Err(err) => {
+                    self.env = prev;
+                    return Err(err);
+                }
+            }
+        }
+
+        self.env = prev;
+        Ok(())
+    }
 }
 
 impl Environ {
     pub fn new() -> Self {
         Environ {
             values: HashMap::new(),
+            enclosing: None,
         }
+    }
+
+    pub fn with_enclosing(enclosing: &Env) -> Env {
+        let env = Environ {
+            values: HashMap::new(),
+            enclosing: Some(Rc::clone(enclosing)),
+        };
+
+        env.to_rc()
     }
 
     pub fn to_rc(self) -> Env {
@@ -76,6 +105,8 @@ impl Environ {
     pub fn get(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
         if let Some(val) = self.values.get(name) {
             Ok(val.clone())
+        } else if let Some(ref env) = self.enclosing {
+            env.borrow().get(name, loc)
         } else {
             Err(RuntimeError::undefined_variable(loc, name))
         }
@@ -86,6 +117,8 @@ impl Environ {
             self.values.insert(name, val);
 
             Ok(())
+        } else if let Some(ref env) = self.enclosing {
+            env.borrow_mut().assign(name, val, loc)
         } else {
             Err(RuntimeError::undefined_variable(loc, &name))
         }
@@ -170,6 +203,9 @@ impl Evaluable<()> for Stmt {
                 };
 
                 inter.env.borrow_mut().define(name, init_val);
+            }
+            Block(stmts) => {
+                inter.execute_block(stmts, Environ::with_enclosing(&inter.env))?;
             }
         })
     }
