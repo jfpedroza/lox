@@ -14,6 +14,7 @@ mod test_utils;
 mod utils;
 mod value;
 
+use ansi_term::Color::{Blue, Cyan, Green, Purple};
 use error::print_err;
 use eval::Interpreter;
 use failure::{Fallible, ResultExt};
@@ -24,6 +25,7 @@ use std::ffi::OsStr;
 use std::io::{stdin, Read};
 use std::path::Path;
 use stmt::{Stmt, StmtKind};
+use value::Value;
 
 pub struct Lox {
     inter: Interpreter,
@@ -72,8 +74,10 @@ impl Lox {
         println!("Lox 0.0.1");
         println!("Press Ctrl+D to exit\n");
 
+        let prompt = format!("{}> ", Blue.bold().paint("lox"));
+
         loop {
-            match rl.readline("\x1b[1;34mlox\x1b[0m> ") {
+            match rl.readline(&prompt) {
                 Ok(line) if line.is_empty() => (),
                 Ok(line) => match self.run_prompt_line(&line) {
                     Ok(()) => (),
@@ -103,7 +107,16 @@ impl Lox {
                     ..
                 } => {
                     let val = self.inter.evaluate(expr)?;
-                    println!("=> {}", val);
+                    let output = match val {
+                        Value::Integer(int) => Blue.paint(int.to_string()),
+                        Value::Float(float) => Cyan.paint(float.to_string()),
+                        Value::Str(string) => {
+                            Green.paint(format!("\"{}\"", utils::escape_string(&string)))
+                        }
+                        Value::Boolean(boolean) => Purple.paint(boolean.to_string()),
+                        Value::Nil => Purple.paint("nil"),
+                    };
+                    println!("=> {}", output);
                 }
                 stmt => {
                     self.inter.execute(stmt)?;

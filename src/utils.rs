@@ -20,6 +20,24 @@ pub fn unescape_string(input: &str) -> String {
     output
 }
 
+pub fn escape_string(input: &str) -> String {
+    let mut chars = input.chars();
+
+    let mut output = String::with_capacity(input.len());
+    while let Some(c) = chars.next() {
+        match c {
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            '\0' => output.push_str("\\0"),
+            '\\' => output.push_str("\\\\"),
+            _ => output.push(c),
+        }
+    }
+
+    output
+}
+
 pub fn is_alpha(ch: char) -> bool {
     matches!(ch, 'a'..='z' | 'A'..='Z' | '_')
 }

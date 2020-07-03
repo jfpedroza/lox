@@ -1,12 +1,13 @@
 use crate::eval::RuntimeError;
 use crate::lexer::ScanningError;
 use crate::parser::ParsingError;
+use ansi_term::Color::Red;
 use failure::Error;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 pub fn print_err(err: &Error) {
     let mut fail = err.as_fail();
-    eprintln!("\x1b[31;1m{}\x1b[0m: {}", error_type(err), fail);
+    eprintln!("{}: {}", Red.bold().paint(error_type(err)), fail);
     while let Some(cause) = fail.cause() {
         eprintln!("> {}", cause);
         fail = cause;
