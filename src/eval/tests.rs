@@ -1,52 +1,65 @@
 use super::*;
 use crate::test_utils::*;
-use crate::value::Value::*;
+use crate::value::{types::*, Value::*};
+
+pub fn env_get(inter: &Interpreter, name: &str) -> ValueRes {
+    inter.env.borrow().get(name, Loc::default())
+}
+
+fn test_value_res(input: &str, expected: ValueRes) {
+    let expr = get_expr(input);
+    let mut inter = Interpreter::new();
+    match (inter.evaluate(expr), expected) {
+        (Ok(val), Ok(output)) if val.equal(&output).is_truthy() => {}
+        (got, expected) => assert_eq!(expected, got),
+    }
+}
 
 #[test]
 fn test_integer_expr() {
     let expr = get_expr("1996");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Integer(1996)), expr.evaluate(&mut inter));
+    assert_eq!(Ok(Integer(1996)), inter.evaluate(expr));
 }
 
 #[test]
 fn test_float_expr() {
     let expr = get_expr("8.5");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Float(8.5)), expr.evaluate(&mut inter));
+    assert_eq!(Ok(Float(8.5)), inter.evaluate(expr));
 }
 
 #[test]
 fn test_string_expr() {
     let expr = get_expr("\"1996\"");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Str(String::from("1996"))), expr.evaluate(&mut inter));
+    assert_eq!(Ok("1996".into()), inter.evaluate(expr));
 }
 
 #[test]
 fn test_true_expr() {
     let expr = get_expr("true");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Boolean(true)), expr.evaluate(&mut inter));
+    assert_eq!(Ok(Boolean(true)), inter.evaluate(expr));
 }
 
 #[test]
 fn test_false_expr() {
     let expr = get_expr("false");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Boolean(false)), expr.evaluate(&mut inter));
+    assert_eq!(Ok(Boolean(false)), inter.evaluate(expr));
 }
 
 #[test]
 fn test_nil_expr() {
     let expr = get_expr("nil");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Nil), expr.evaluate(&mut inter));
+    assert_eq!(Ok(Nil), inter.evaluate(expr));
 }
 
 #[test]
 fn test_unary_not_expr() {
-    for (input, output) in &[
+    for (input, output) in vec![
         ("!true", false),
         ("!false", true),
         ("!nil", true),
@@ -58,169 +71,142 @@ fn test_unary_not_expr() {
     ] {
         let expr = get_expr(input);
         let mut inter = Interpreter::new();
-        assert_eq!(Ok(Boolean(*output)), expr.evaluate(&mut inter));
+        assert_eq!(Ok(Boolean(output)), inter.evaluate(expr));
     }
 }
 
 #[test]
 fn test_unary_negate_expr() {
-    let mut inter = Interpreter::new();
-    let expr = get_expr("-100");
-    assert_eq!(Ok(Integer(-100)), expr.evaluate(&mut inter));
-    let expr = get_expr("-100.23");
-    assert_eq!(Ok(Float(-100.23)), expr.evaluate(&mut inter));
+    for (input, output) in vec![
+        ("-100", Ok(Integer(-100))),
+        ("-100.23", Ok(Float(-100.23))),
+        ("-true", Err(unsup_op("-", BOOL, (0, 0)))),
+        ("-nil", Err(unsup_op("-", NIL, (0, 0)))),
+        ("-\"hi\"", Err(unsup_op("-", STRING, (0, 0)))),
+    ] {
+        test_value_res(input, output);
+    }
 }
 
 #[test]
 fn test_binary_add_expr() {
-    for (input, output) in &[
-        ("30 + 50", Integer(80)),
-        ("30 + 50.3", Float(80.3)),
-        ("30.4 + 50.3", Float(80.7)),
-        ("30.4 + 50", Float(80.4)),
-        ("\"hello_\" + \"world\"", Str(String::from("hello_world"))),
+    for (input, output) in vec![
+        ("30 + 50", Ok(Integer(80))),
+        ("30 + 50.3", Ok(Float(80.3))),
+        ("30.4 + 50.3", Ok(Float(80.7))),
+        ("30.4 + 50", Ok(Float(80.4))),
+        ("\"hello_\" + \"world\"", Ok("hello_world".into())),
+        ("\"hello\" + 3", Err(unsup_ops("+", STRING, INT, (0, 8)))),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
-        }
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_binary_sub_expr() {
-    for (input, output) in &[
-        ("30 - 50", Integer(-20)),
-        ("30 - 50.3", Float(-20.3)),
-        ("30.4 - 50.3", Float(-19.9)),
-        ("30.4 - 50", Float(-19.6)),
+    for (input, output) in vec![
+        ("30 - 50", Ok(Integer(-20))),
+        ("30 - 50.3", Ok(Float(-20.3))),
+        ("30.4 - 50.3", Ok(Float(-19.9))),
+        ("30.4 - 50", Ok(Float(-19.6))),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
-        }
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_binary_mul_expr() {
-    for (input, output) in &[
-        ("30 * 50", Integer(1500)),
-        ("30 * 50.3", Float(1509.0)),
-        ("30.4 * 50.3", Float(1529.12)),
-        ("30.4 * 50", Float(1520.0)),
+    for (input, output) in vec![
+        ("30 * 50", Ok(Integer(1500))),
+        ("30 * 50.3", Ok(Float(1509.0))),
+        ("30.4 * 50.3", Ok(Float(1529.12))),
+        ("30.4 * 50", Ok(Float(1520.0))),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
-        }
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_binary_div_expr() {
-    for (input, output) in &[
-        ("50 / 20", Integer(2)),
-        ("30 / 50.0", Float(0.6)),
-        ("30.4 / 50.3", Float(0.6043737574552684)),
-        ("30.4 / 50", Float(0.608)),
+    for (input, output) in vec![
+        ("50 / 20", Ok(Integer(2))),
+        ("30 / 50.0", Ok(Float(0.6))),
+        ("30.4 / 50.3", Ok(Float(0.6043737574552684))),
+        ("30.4 / 50", Ok(Float(0.608))),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
-        }
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_binary_rem_expr() {
-    for (input, output) in &[
-        ("30 % 50", Integer(30)),
-        ("30 % 5", Integer(0)),
-        ("30 % 4.3", Float(4.2)),
-        ("34.2 % 8.1", Float(1.8)),
-        ("34.2 % 8", Float(2.2)),
+    for (input, output) in vec![
+        ("30 % 50", Ok(Integer(30))),
+        ("30 % 5", Ok(Integer(0))),
+        ("30 % 4.3", Ok(Float(4.2))),
+        ("34.2 % 8.1", Ok(Float(1.8))),
+        ("34.2 % 8", Ok(Float(2.2))),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
-        }
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_binary_comparison_expr() {
-    for (input, output) in [
-        ("50 == 20", false),
-        ("10 + 10 == 20", true),
-        ("30 == 50.0", false),
-        ("30 == 30.0", true),
-        ("30.4 == 50.3", false),
-        ("30.4 + 50.3 == 80.7", true),
-        ("30.4 == 50", false),
-        ("true == true", true),
-        ("true == !false", true),
-        ("\"hello\" == \"hell\" + \"o\"", true),
-        ("\"hello\" == 3", false),
-        ("nil == true", false),
-        ("nil == nil", true),
-        ("50 == 20", false),
-        ("10 + 10 != 20", false),
-        ("30 != 50.0", true),
-        ("30 != 30.0", false),
-        ("30.4 != 50.3", true),
-        ("30.4 + 50.3 != 80.7", false),
-        ("30.4 != 50", true),
-        ("true != true", false),
-        ("true != !false", false),
-        ("\"hello\" != \"hell\" + \"o\"", false),
-        ("\"hello\" != 3", true),
-        ("nil != true", true),
-        ("nil != nil", false),
-        ("50 > 20", true),
-        ("30 > 50.0", false),
-        ("30.4 > 50.3", false),
-        ("30.4 > 50", false),
-        ("50 >= 20", true),
-        ("30 >= 50.0", false),
-        ("30.4 >= 50.3", false),
-        ("30.4 >= 50", false),
-        ("30.4 >= 30.4", true),
-        ("50 < 20", false),
-        ("30 < 50.0", true),
-        ("30.4 < 50.3", true),
-        ("30.4 < 50", true),
-        ("50 <= 20", false),
-        ("30 <= 50.0", true),
-        ("30.4 <= 50.3", true),
-        ("30.4 <= 50", true),
-        ("30.4 <= 30.4", true),
-    ]
-    .iter()
-    {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        let output = Boolean(*output);
-        if !val.equal(&output).is_truthy() {
-            assert_eq!(output, val);
-        }
+    for (input, output) in vec![
+        ("50 == 20", Ok(false)),
+        ("10 + 10 == 20", Ok(true)),
+        ("30 == 50.0", Ok(false)),
+        ("30 == 30.0", Ok(true)),
+        ("30.4 == 50.3", Ok(false)),
+        ("30.4 + 50.3 == 80.7", Ok(true)),
+        ("30.4 == 50", Ok(false)),
+        ("true == true", Ok(true)),
+        ("true == !false", Ok(true)),
+        ("\"hello\" == \"hell\" + \"o\"", Ok(true)),
+        ("\"hello\" == 3", Ok(false)),
+        ("nil == true", Ok(false)),
+        ("nil == nil", Ok(true)),
+        ("50 == 20", Ok(false)),
+        ("10 + 10 != 20", Ok(false)),
+        ("30 != 50.0", Ok(true)),
+        ("30 != 30.0", Ok(false)),
+        ("30.4 != 50.3", Ok(true)),
+        ("30.4 + 50.3 != 80.7", Ok(false)),
+        ("30.4 != 50", Ok(true)),
+        ("true != true", Ok(false)),
+        ("true != !false", Ok(false)),
+        ("\"hello\" != \"hell\" + \"o\"", Ok(false)),
+        ("\"hello\" != 3", Ok(true)),
+        ("nil != true", Ok(true)),
+        ("nil != nil", Ok(false)),
+        ("50 > 20", Ok(true)),
+        ("30 > 50.0", Ok(false)),
+        ("30.4 > 50.3", Ok(false)),
+        ("30.4 > 50", Ok(false)),
+        ("50 >= 20", Ok(true)),
+        ("30 >= 50.0", Ok(false)),
+        ("30.4 >= 50.3", Ok(false)),
+        ("30.4 >= 50", Ok(false)),
+        ("30.4 >= 30.4", Ok(true)),
+        ("50 < 20", Ok(false)),
+        ("30 < 50.0", Ok(true)),
+        ("30.4 < 50.3", Ok(true)),
+        ("30.4 < 50", Ok(true)),
+        ("50 <= 20", Ok(false)),
+        ("30 <= 50.0", Ok(true)),
+        ("30.4 <= 50.3", Ok(true)),
+        ("30.4 <= 50", Ok(true)),
+        ("30.4 <= 30.4", Ok(true)),
+    ] {
+        let output = output.map(Boolean);
+        test_value_res(input, output);
     }
 }
 
 #[test]
 fn test_conditional_expr() {
-    for (input, output) in &[
+    for (input, output) in vec![
         ("true ? 30 : 50", Integer(30)),
         ("\"string\" ? 1.0 : 200", Float(1.0)),
         ("!3 ? (3 + 5) : (88/11)", Integer(8)),
@@ -229,25 +215,137 @@ fn test_conditional_expr() {
     ] {
         let expr = get_expr(input);
         let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
+        let val = inter.evaluate(expr).unwrap();
+        if !val.equal(&output).is_truthy() {
+            assert_eq!(output, val);
         }
     }
 }
 
 #[test]
 fn test_comma_expr() {
-    for (input, output) in &[
+    for (input, output) in vec![
         ("3434 + 76, (5 * 8 + 2)", Integer(42)),
         ("30, \"string\", true", Boolean(true)),
         ("(3 + 5), (4, (7, 88/11))", Integer(8)),
     ] {
         let expr = get_expr(input);
         let mut inter = Interpreter::new();
-        let val = expr.evaluate(&mut inter).unwrap();
-        if !val.equal(output).is_truthy() {
-            assert_eq!(*output, val);
+        let val = inter.evaluate(expr).unwrap();
+        if !val.equal(&output).is_truthy() {
+            assert_eq!(output, val);
         }
     }
+}
+
+#[test]
+fn test_division_by_zero() {
+    for (input, col) in vec![
+        ("30/0", 2),
+        ("30/0.0", 2),
+        ("30.0/0.0", 4),
+        ("30.0/0", 4),
+        ("30%0", 2),
+        ("30%0.0", 2),
+        ("30.0%0.0", 4),
+        ("30.0%0", 4),
+    ] {
+        let expr = get_expr(input);
+        let mut inter = Interpreter::new();
+        assert_eq!(
+            Err(RuntimeError::DivisionByZero(Loc::new(0, col),)),
+            inter.evaluate(expr)
+        );
+    }
+}
+
+#[test]
+fn test_empty_stmt() {
+    let input = "";
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+}
+
+#[test]
+fn test_var_stmt() {
+    let input = r#"var hello = "world";"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_var_assignment() {
+    let input = r#"var hello = "world";
+    hello = 1 + 1;
+    hello = "Earth";"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_var_assignment_in_block() {
+    let input = r#"var hello = "world";
+    {
+        1 + 1; // This does nothing
+        hello = "Earth";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_var_shadowing() {
+    let input = r#"var hello = "world";
+    {
+        var hello = "Earth";
+        hello = "planet";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_var_print() {
+    let input = r#"var hello = "world";
+    print hello;"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(stmts));
+}
+
+#[test]
+fn test_undefined_variable() {
+    let input = r#"hello;"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(
+        Err(RuntimeError::UndefinedVariable(
+            Loc::new(0, 0),
+            String::from("hello")
+        )),
+        inter.interpret(stmts)
+    );
+}
+
+#[test]
+fn test_undefined_variable_in_assignment() {
+    let input = r#"hello = "world";"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(
+        Err(RuntimeError::UndefinedVariable(
+            Loc::new(0, 0),
+            String::from("hello")
+        )),
+        inter.interpret(stmts)
+    );
 }

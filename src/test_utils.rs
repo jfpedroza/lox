@@ -1,3 +1,4 @@
+use crate::eval::RuntimeError;
 use crate::expr::{BinOp, Expr, ExprKind, LitExpr, UnOp};
 use crate::lexer::{Scanner, Token};
 use crate::location::Loc;
@@ -13,6 +14,12 @@ pub fn get_expr(input: &str) -> Expr {
     let tokens = get_tokens(input);
     let mut parser = Parser::new(&tokens);
     parser.expression().unwrap()
+}
+
+pub fn get_stmts(input: &str) -> Vec<Stmt> {
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    parser.parse().unwrap()
 }
 
 pub fn int_expr(int: i64, (line, col): (usize, usize)) -> Expr {
@@ -133,4 +140,26 @@ pub fn var_stmt(name: &str, init: Option<Expr>, (line, col): (usize, usize)) -> 
 
 pub fn block_stmt(stmts: Vec<Stmt>, (line, col): (usize, usize)) -> Stmt {
     Stmt::block(stmts, Loc::new(line, col))
+}
+
+pub fn unsup_op(op: &str, operand_type: &str, (line, col): (usize, usize)) -> RuntimeError {
+    RuntimeError::UnsupportedOperand(
+        Loc::new(line, col),
+        String::from(op),
+        String::from(operand_type),
+    )
+}
+
+pub fn unsup_ops(
+    op: &str,
+    left_type: &str,
+    right_type: &str,
+    (line, col): (usize, usize),
+) -> RuntimeError {
+    RuntimeError::UnsupportedOperands(
+        Loc::new(line, col),
+        String::from(op),
+        String::from(left_type),
+        String::from(right_type),
+    )
 }
