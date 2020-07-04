@@ -2,6 +2,7 @@ use crate::expr::{BinOp, Expr, ExprKind, LitExpr, UnOp};
 use crate::lexer::{Scanner, Token};
 use crate::location::Loc;
 use crate::parser::Parser;
+use crate::stmt::Stmt;
 
 pub fn get_tokens<'a>(input: &'a str) -> Vec<Token<'a>> {
     let mut scanner = Scanner::new(input);
@@ -108,4 +109,28 @@ pub fn comma_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr 
 
 pub fn cond_expr(cond: Expr, left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
     Expr::conditional(cond, left, right, Loc::new(line, col))
+}
+
+pub fn var_expr(name: &str, (line, col): (usize, usize)) -> Expr {
+    Expr::variable(name, Loc::new(line, col))
+}
+
+pub fn assign_expr(name: &str, expr: Expr, (line, col): (usize, usize)) -> Expr {
+    Expr::assign(String::from(name), expr, Loc::new(line, col))
+}
+
+pub fn expr_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
+    Stmt::expression(expr, Loc::new(line, col))
+}
+
+pub fn print_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
+    Stmt::print(expr, Loc::new(line, col))
+}
+
+pub fn var_stmt(name: &str, init: Option<Expr>, (line, col): (usize, usize)) -> Stmt {
+    Stmt::var(name, init, Loc::new(line, col))
+}
+
+pub fn block_stmt(stmts: Vec<Stmt>, (line, col): (usize, usize)) -> Stmt {
+    Stmt::block(stmts, Loc::new(line, col))
 }

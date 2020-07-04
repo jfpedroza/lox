@@ -13,7 +13,7 @@ pub struct Parser<'a> {
     input: &'a [Token<'a>],
     current: usize,
     errors: Vec<ParsingError>,
-    pub allow_expression: bool,
+    pub(super) allow_expression: bool,
     found_expression: bool,
 }
 
