@@ -97,23 +97,11 @@ fn string_token<'a>(lexeme: &'a str, literal: &'a str, line: usize, column: usiz
 }
 
 fn integer_token<'a>(lexeme: &'a str, literal: i64, line: usize, column: usize) -> Token<'a> {
-    literal_token(
-        Number(NumberKind::Integer),
-        lexeme,
-        Literal::Integer(literal),
-        line,
-        column,
-    )
+    literal_token(Integer, lexeme, Literal::Integer(literal), line, column)
 }
 
 fn float_token<'a>(lexeme: &'a str, literal: f64, line: usize, column: usize) -> Token<'a> {
-    literal_token(
-        Number(NumberKind::Float),
-        lexeme,
-        Literal::Float(literal),
-        line,
-        column,
-    )
+    literal_token(Float, lexeme, Literal::Float(literal), line, column)
 }
 
 #[test]
