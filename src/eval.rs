@@ -41,7 +41,7 @@ type ExecuteRes = Result<(), RuntimeError>;
 trait Evaluable<Res> {
     type Error;
 
-    fn evaluate(self, inter: &mut Interpreter) -> Result<Res, Self::Error>;
+    fn evaluate(&self, inter: &mut Interpreter) -> Result<Res, Self::Error>;
 }
 
 impl Interpreter {
@@ -51,7 +51,7 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> ExecuteRes {
+    pub fn interpret(&mut self, stmts: &[Stmt]) -> ExecuteRes {
         for stmt in stmts {
             self.execute(stmt)?;
         }
@@ -59,15 +59,15 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn evaluate<T: Into<Expr>>(&mut self, expr: T) -> ValueRes {
-        expr.into().evaluate(self)
+    pub fn evaluate(&mut self, expr: &Expr) -> ValueRes {
+        expr.evaluate(self)
     }
 
-    pub fn execute<T: Into<Stmt>>(&mut self, stmt: T) -> ExecuteRes {
-        stmt.into().evaluate(self)
+    pub fn execute(&mut self, stmt: &Stmt) -> ExecuteRes {
+        stmt.evaluate(self)
     }
 
-    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Env) -> ExecuteRes {
+    fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
         let prev = Rc::clone(&self.env);
         self.env = env;
 
@@ -107,8 +107,8 @@ impl Environ {
         Rc::new(RefCell::new(self))
     }
 
-    pub fn define(&mut self, name: String, val: Value) {
-        self.values.insert(name, val);
+    pub fn define(&mut self, name: &str, val: Value) {
+        self.values.insert(String::from(name), val);
     }
 
     pub fn get(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
@@ -121,9 +121,9 @@ impl Environ {
         }
     }
 
-    pub fn assign(&mut self, name: String, val: Value, loc: Loc) -> Result<(), RuntimeError> {
-        if self.values.contains_key(&name) {
-            self.values.insert(name, val);
+    pub fn assign(&mut self, name: &str, val: Value, loc: Loc) -> Result<(), RuntimeError> {
+        if self.values.contains_key(name) {
+            self.values.insert(String::from(name), val);
 
             Ok(())
         } else if let Some(ref env) = self.enclosing {
@@ -137,9 +137,9 @@ impl Environ {
 impl Evaluable<Value> for Expr {
     type Error = RuntimeError;
 
-    fn evaluate(self, inter: &mut Interpreter) -> ValueRes {
+    fn evaluate(&self, inter: &mut Interpreter) -> ValueRes {
         use ExprKind::*;
-        Ok(match self.kind {
+        Ok(match &self.kind {
             Literal(literal) => literal.into(),
             Grouping(expr) => inter.evaluate(expr)?,
             Unary(op, expr) => {
@@ -194,9 +194,9 @@ impl Evaluable<Value> for Expr {
 impl Evaluable<()> for Stmt {
     type Error = RuntimeError;
 
-    fn evaluate(self, inter: &mut Interpreter) -> Result<(), Self::Error> {
+    fn evaluate(&self, inter: &mut Interpreter) -> Result<(), Self::Error> {
         use StmtKind::*;
-        Ok(match self.kind {
+        Ok(match &self.kind {
             Expression(expr) => {
                 inter.evaluate(expr)?;
             }

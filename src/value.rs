@@ -47,14 +47,14 @@ impl Value {
     }
 }
 
-impl From<LitExpr> for Value {
-    fn from(literal: LitExpr) -> Self {
+impl From<&LitExpr> for Value {
+    fn from(literal: &LitExpr) -> Self {
         use LitExpr::*;
         match literal {
-            Integer(int) => Value::Integer(int),
-            Float(float) => Value::Float(float),
-            Str(string) => Value::Str(string),
-            Boolean(boolean) => Value::Boolean(boolean),
+            Integer(int) => Value::Integer(*int),
+            Float(float) => Value::Float(*float),
+            Str(string) => Value::Str(string.clone()),
+            Boolean(boolean) => Value::Boolean(*boolean),
             Nil => Value::Nil,
         }
     }
