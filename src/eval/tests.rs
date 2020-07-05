@@ -97,6 +97,14 @@ fn test_binary_add_expr() {
         ("30.4 + 50", Ok(Float(80.4))),
         ("\"hello_\" + \"world\"", Ok("hello_world".into())),
         ("\"hello\" + 3", Err(unsup_ops("+", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" + true",
+            Err(unsup_ops("+", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 + false", Err(unsup_ops("+", FLOAT, BOOL, (0, 4)))),
+        ("nil + 100", Err(unsup_ops("+", NIL, INT, (0, 4)))),
+        ("true + false", Err(unsup_ops("+", BOOL, BOOL, (0, 5)))),
+        ("nil + nil", Err(unsup_ops("+", NIL, NIL, (0, 4)))),
     ] {
         test_value_res(input, output);
     }
@@ -109,6 +117,19 @@ fn test_binary_sub_expr() {
         ("30 - 50.3", Ok(Float(-20.3))),
         ("30.4 - 50.3", Ok(Float(-19.9))),
         ("30.4 - 50", Ok(Float(-19.6))),
+        (
+            "\"hello_\" - \"world\"",
+            Err(unsup_ops("-", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" - 3", Err(unsup_ops("-", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" - true",
+            Err(unsup_ops("-", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 - false", Err(unsup_ops("-", FLOAT, BOOL, (0, 4)))),
+        ("nil - 100", Err(unsup_ops("-", NIL, INT, (0, 4)))),
+        ("true - false", Err(unsup_ops("-", BOOL, BOOL, (0, 5)))),
+        ("nil - nil", Err(unsup_ops("-", NIL, NIL, (0, 4)))),
     ] {
         test_value_res(input, output);
     }
@@ -121,6 +142,19 @@ fn test_binary_mul_expr() {
         ("30 * 50.3", Ok(Float(1509.0))),
         ("30.4 * 50.3", Ok(Float(1529.12))),
         ("30.4 * 50", Ok(Float(1520.0))),
+        (
+            "\"hello_\" * \"world\"",
+            Err(unsup_ops("*", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" * 3", Err(unsup_ops("*", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" * true",
+            Err(unsup_ops("*", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 * false", Err(unsup_ops("*", FLOAT, BOOL, (0, 4)))),
+        ("nil * 100", Err(unsup_ops("*", NIL, INT, (0, 4)))),
+        ("true * false", Err(unsup_ops("*", BOOL, BOOL, (0, 5)))),
+        ("nil * nil", Err(unsup_ops("*", NIL, NIL, (0, 4)))),
     ] {
         test_value_res(input, output);
     }
@@ -133,6 +167,19 @@ fn test_binary_div_expr() {
         ("30 / 50.0", Ok(Float(0.6))),
         ("30.4 / 50.3", Ok(Float(0.6043737574552684))),
         ("30.4 / 50", Ok(Float(0.608))),
+        (
+            "\"hello_\" / \"world\"",
+            Err(unsup_ops("/", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" / 3", Err(unsup_ops("/", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" / true",
+            Err(unsup_ops("/", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 / false", Err(unsup_ops("/", FLOAT, BOOL, (0, 4)))),
+        ("nil / 100", Err(unsup_ops("/", NIL, INT, (0, 4)))),
+        ("true / false", Err(unsup_ops("/", BOOL, BOOL, (0, 5)))),
+        ("nil / nil", Err(unsup_ops("/", NIL, NIL, (0, 4)))),
     ] {
         test_value_res(input, output);
     }
@@ -146,6 +193,19 @@ fn test_binary_rem_expr() {
         ("30 % 4.3", Ok(Float(4.2))),
         ("34.2 % 8.1", Ok(Float(1.8))),
         ("34.2 % 8", Ok(Float(2.2))),
+        (
+            "\"hello_\" % \"world\"",
+            Err(unsup_ops("%", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" % 3", Err(unsup_ops("%", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" % true",
+            Err(unsup_ops("%", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 % false", Err(unsup_ops("%", FLOAT, BOOL, (0, 4)))),
+        ("nil % 100", Err(unsup_ops("%", NIL, INT, (0, 4)))),
+        ("true % false", Err(unsup_ops("%", BOOL, BOOL, (0, 5)))),
+        ("nil % nil", Err(unsup_ops("%", NIL, NIL, (0, 4)))),
     ] {
         test_value_res(input, output);
     }
@@ -198,6 +258,30 @@ fn test_binary_comparison_expr() {
         ("30.4 <= 50.3", Ok(true)),
         ("30.4 <= 50", Ok(true)),
         ("30.4 <= 30.4", Ok(true)),
+        (
+            "\"hello_\" > \"world\"",
+            Err(unsup_ops(">", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" < 3", Err(unsup_ops("<", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" >= true",
+            Err(unsup_ops(">=", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 <= false", Err(unsup_ops("<=", FLOAT, BOOL, (0, 4)))),
+        ("nil > 100", Err(unsup_ops(">", NIL, INT, (0, 4)))),
+        ("true < false", Err(unsup_ops("<", BOOL, BOOL, (0, 5)))),
+        ("nil >= nil", Err(unsup_ops(">=", NIL, NIL, (0, 4)))),
+        (
+            "\"hello_\" <= \"world\"",
+            Err(unsup_ops("<=", STRING, STRING, (0, 9))),
+        ),
+        ("\"hello\" > 3", Err(unsup_ops(">", STRING, INT, (0, 8)))),
+        (
+            "\"hello\" < true",
+            Err(unsup_ops("<", STRING, BOOL, (0, 8))),
+        ),
+        ("3.2 >= false", Err(unsup_ops(">=", FLOAT, BOOL, (0, 4)))),
+        ("nil <= 100", Err(unsup_ops("<=", NIL, INT, (0, 4)))),
     ] {
         let output = output.map(Boolean);
         test_value_res(input, output);
