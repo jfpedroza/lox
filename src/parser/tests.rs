@@ -282,8 +282,25 @@ fn test_nested_conditional_expr() {
 }
 
 #[test]
+fn test_variable_expr() {
+    let tokens = get_tokens("variable");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(Ok(var_expr("variable", (0, 0)),), parser.expression());
+}
+
+#[test]
+fn test_assign_expr() {
+    let tokens = get_tokens(r#"hello = "world""#);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(assign_expr("hello", str_expr("world", (0, 8)), (0, 0))),
+        parser.expression()
+    );
+}
+
+#[test]
 fn test_nested_expr() {
-    let tokens = get_tokens(r#"2 > 3 ? "yes" : (1e4 + 29 - 3.1416) * 2/1.0"#);
+    let tokens = get_tokens(r#"2 > 3 ? "yes" : (1e4 + 29 - 3.1416) * a/1.0"#);
     let mut parser = Parser::new(&tokens);
     assert_eq!(
         Ok(cond_expr(
@@ -299,7 +316,7 @@ fn test_nested_expr() {
                         ),
                         (0, 16)
                     ),
-                    int_expr(2, (0, 38)),
+                    var_expr("a", (0, 38)),
                     (0, 36)
                 ),
                 float_expr(1.0, (0, 40)),
@@ -308,6 +325,78 @@ fn test_nested_expr() {
             (0, 6)
         )),
         parser.expression()
+    );
+}
+
+#[test]
+fn test_expr_stmt() {
+    let tokens = get_tokens("1996;");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![expr_stmt(int_expr(1996, (0, 0)), (0, 0))]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_print_stmt() {
+    let tokens = get_tokens("print \"1996\";");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![print_stmt(str_expr("1996", (0, 6)), (0, 0))]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_var_stmt() {
+    let tokens = get_tokens("var pi = 3.1416;");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![var_stmt(
+            "pi",
+            Some(float_expr(3.1416, (0, 9))),
+            (0, 0)
+        )]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_null_var_stmt() {
+    let tokens = get_tokens("var name;");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(Ok(vec![var_stmt("name", None, (0, 0))]), parser.parse());
+}
+
+#[test]
+fn test_block_stmt() {
+    let input = r#"{
+    var name;
+    1996;
+    {
+        var pi = 3.1416;
+        print "1996";
+    }
+    }"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![block_stmt(
+            vec![
+                var_stmt("name", None, (1, 4)),
+                expr_stmt(int_expr(1996, (2, 4)), (2, 4)),
+                block_stmt(
+                    vec![
+                        var_stmt("pi", Some(float_expr(3.1416, (4, 17))), (4, 8)),
+                        print_stmt(str_expr("1996", (5, 14)), (5, 8)),
+                    ],
+                    (3, 4)
+                ),
+            ],
+            (0, 0)
+        )]),
+        parser.parse()
     );
 }
 
@@ -347,5 +436,45 @@ fn test_expected_expression() {
             String::from("if")
         )),
         parser.expression()
+    );
+}
+
+#[test]
+fn test_missing_brace_paren() {
+    let tokens = get_tokens("{100;");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Err(ParsingError::ExpectedCloseBrace(
+            Loc::new(0, 5),
+            String::from("EOF")
+        )),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_missing_semicolon() {
+    let tokens = get_tokens("print 1:");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Err(ParsingError::ExpectedSemicolon(
+            Loc::new(0, 7),
+            String::from("value"),
+            String::from(":")
+        )),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_missing_var_name() {
+    let tokens = get_tokens("var 3");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Err(ParsingError::ExpectedVarName(
+            Loc::new(0, 4),
+            String::from("3")
+        )),
+        parser.parse()
     );
 }

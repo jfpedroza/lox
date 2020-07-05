@@ -1,4 +1,21 @@
-expression     → conditional ( "," expression )? ;
+program        → declaration* EOF ;
+
+declaration    → varDecl
+               | statement ;
+
+varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+
+statement      → exprStmt
+               | printStmt
+               | block ;
+
+exprStmt       → expression ";" ;
+printStmt      → "print" expression ";" ;
+block          → "{" declaration* "}" ;
+
+expression     → assignment ( "," expression )? ;
+assignment     → IDENTIFIER "=" assignment
+               | conditional ;
 conditional    → equality ( "?" expression : conditional )? ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
@@ -6,5 +23,7 @@ addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
 multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
 unary          → ( "!" | "-" ) unary
                | primary ;
-primary        → NUMBER | STRING | "false" | "true" | "nil"
-               | "(" expression ")" ;
+primary        → "false" | "true" | "nil"
+               | NUMBER | STRING
+               | "(" expression ")"
+               | IDENTIFIER

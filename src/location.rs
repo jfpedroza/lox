@@ -1,4 +1,4 @@
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub struct Loc {
@@ -36,5 +36,17 @@ pub struct Located<T: PartialEq> {
 impl<T: PartialEq> Located<T> {
     pub fn new(kind: T, loc: Loc) -> Self {
         Self { kind, loc }
+    }
+}
+
+impl<T: PartialEq + Debug> Debug for Located<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{:?}[{}]", self.kind, self.loc)
+    }
+}
+
+impl<T: PartialEq> From<Box<Located<T>>> for Located<T> {
+    fn from(boxed: Box<Located<T>>) -> Self {
+        *boxed
     }
 }

@@ -60,6 +60,39 @@ impl From<LitExpr> for Value {
     }
 }
 
+impl From<i64> for Value {
+    fn from(input: i64) -> Self {
+        Value::Integer(input)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(input: f64) -> Self {
+        Value::Float(input)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(input: &str) -> Self {
+        Value::Str(String::from(input))
+    }
+}
+
+impl From<bool> for Value {
+    fn from(input: bool) -> Self {
+        Value::Boolean(input)
+    }
+}
+
+impl<T: Into<Value>> From<Option<T>> for Value {
+    fn from(input: Option<T>) -> Self {
+        match input {
+            Some(input) => input.into(),
+            None => Value::Nil,
+        }
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use Value::*;
