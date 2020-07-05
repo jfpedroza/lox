@@ -107,7 +107,7 @@ pub fn less_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Exp
 }
 
 pub fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::groping(expr, Loc::new(line, col))
+    Expr::grouping(expr, Loc::new(line, col))
 }
 
 pub fn comma_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {

@@ -21,10 +21,10 @@ pub fn unescape_string(input: &str) -> String {
 }
 
 pub fn escape_string(input: &str) -> String {
-    let mut chars = input.chars();
+    let chars = input.chars();
 
     let mut output = String::with_capacity(input.len());
-    while let Some(c) = chars.next() {
+    for c in chars {
         match c {
             '\n' => output.push_str("\\n"),
             '\r' => output.push_str("\\r"),

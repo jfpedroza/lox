@@ -1,3 +1,5 @@
+#![feature(associated_type_defaults)]
+
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
@@ -32,6 +34,7 @@ pub struct Lox {
 }
 
 impl Lox {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Lox {
             inter: Interpreter::new(),
@@ -45,7 +48,7 @@ impl Lox {
         let mut parser = Parser::new(&tokens);
         let stmts = parser.parse()?;
 
-        self.inter.interpret(stmts)?;
+        self.inter.interpret(&stmts)?;
 
         Ok(())
     }
@@ -106,7 +109,7 @@ impl Lox {
                     kind: StmtKind::Expression(expr),
                     ..
                 } => {
-                    let val = self.inter.evaluate(expr)?;
+                    let val = self.inter.evaluate(&expr)?;
                     let output = match val {
                         Value::Integer(int) => Blue.paint(int.to_string()),
                         Value::Float(float) => Cyan.paint(float.to_string()),
@@ -119,11 +122,11 @@ impl Lox {
                     println!("=> {}", output);
                 }
                 stmt => {
-                    self.inter.execute(stmt)?;
+                    self.inter.execute(&stmt)?;
                 }
             }
         } else {
-            self.inter.interpret(stmts)?;
+            self.inter.interpret(&stmts)?;
         }
 
         Ok(())

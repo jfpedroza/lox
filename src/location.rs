@@ -44,9 +44,3 @@ impl<T: PartialEq + Debug> Debug for Located<T> {
         write!(f, "{:?}[{}]", self.kind, self.loc)
     }
 }
-
-impl<T: PartialEq> From<Box<Located<T>>> for Located<T> {
-    fn from(boxed: Box<Located<T>>) -> Self {
-        *boxed
-    }
-}
