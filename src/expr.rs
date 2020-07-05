@@ -16,6 +16,34 @@ pub enum ExprKind {
 
 pub type Expr = Located<ExprKind>;
 
+pub trait Visitor<Res> {
+    type Error;
+    type Result = std::result::Result<Res, Self::Error>;
+
+    fn visit_literal_expr(&mut self, literal: &LitExpr, loc: Loc) -> Self::Result;
+
+    fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_binary_expr(
+        &mut self,
+        left: &Expr,
+        op: &BinOp,
+        right: &Expr,
+        loc: Loc,
+    ) -> Self::Result;
+
+    fn visit_grouping_expr(&mut self, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_comma_expr(&mut self, left: &Expr, right: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_cond_expr(&mut self, cond: &Expr, left: &Expr, right: &Expr, loc: Loc)
+        -> Self::Result;
+
+    fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> Self::Result;
+
+    fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+}
+
 impl Expr {
     pub fn from_literal(literal: &Literal, loc: Loc) -> Self {
         use Literal::*;
@@ -44,7 +72,7 @@ impl Expr {
         Expr::new(ExprKind::Binary(Box::new(left), op, Box::new(right)), loc)
     }
 
-    pub fn groping(expr: Expr, loc: Loc) -> Self {
+    pub fn grouping(expr: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Grouping(Box::new(expr)), loc)
     }
 
@@ -65,6 +93,23 @@ impl Expr {
 
     pub fn assign(name: String, expr: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Assign(name, Box::new(expr)), loc)
+    }
+
+    pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
+    where
+        Vis: Visitor<Res, Error = Error>,
+    {
+        use ExprKind::*;
+        match &self.kind {
+            Literal(literal) => visitor.visit_literal_expr(literal, self.loc),
+            Unary(op, expr) => visitor.visit_unary_expr(op, expr, self.loc),
+            Binary(left, op, right) => visitor.visit_binary_expr(left, op, right, self.loc),
+            Grouping(expr) => visitor.visit_grouping_expr(expr, self.loc),
+            Comma(left, right) => visitor.visit_comma_expr(left, right, self.loc),
+            Conditional(cond, left, right) => visitor.visit_cond_expr(cond, left, right, self.loc),
+            Variable(name) => visitor.visit_variable_expr(name, self.loc),
+            Assign(name, expr) => visitor.visit_assign_expr(name, expr, self.loc),
+        }
     }
 }
 

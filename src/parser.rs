@@ -284,7 +284,7 @@ impl<'a> Parser<'a> {
             LeftParen => {
                 let expr = self.expression()?;
                 self.consume(RightParen, Self::expected_close_paren_error)?;
-                Expr::groping(expr, token.loc)
+                Expr::grouping(expr, token.loc)
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),

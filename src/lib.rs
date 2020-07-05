@@ -1,3 +1,5 @@
+#![feature(associated_type_defaults)]
+
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
@@ -32,6 +34,7 @@ pub struct Lox {
 }
 
 impl Lox {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Lox {
             inter: Interpreter::new(),
