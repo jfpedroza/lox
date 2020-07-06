@@ -398,6 +398,58 @@ fn test_var_shadowing() {
 }
 
 #[test]
+fn test_if_stmt_true() {
+    let input = r#"var hello;
+    if (3 > 2) {
+        hello = "world";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_stmt_false() {
+    let input = r#"var hello;
+    if (3 < 2) {
+        hello = "world";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(Nil), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_else_stmt_true() {
+    let input = r#"var hello;
+    if (3 > 2) {
+        hello = "world";
+    } else {
+        hello = "Earth";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_else_stmt_false() {
+    let input = r#"var hello;
+    if (3 < 2) {
+        hello = "world";
+    } else {
+        hello = "Earth";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
+}
+
+#[test]
 fn test_var_print() {
     let input = r#"var hello = "world";
     print hello;"#;

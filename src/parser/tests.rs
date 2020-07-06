@@ -339,6 +339,48 @@ fn test_expr_stmt() {
 }
 
 #[test]
+fn test_if_stmt() {
+    let input = r#"if (1 > 0) {
+        print "1996";
+    }"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![if_stmt(
+            gt_expr(int_expr(1, (0, 4)), int_expr(0, (0, 8)), (0, 6)),
+            block_stmt(
+                vec![print_stmt(str_expr("1996", (1, 14)), (1, 8)),],
+                (0, 11)
+            ),
+            None,
+            (0, 0)
+        ),]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_if_else_stmt() {
+    let input = r#"if (1 > 0) {
+        print "1996";
+    } else print 5;"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![if_stmt(
+            gt_expr(int_expr(1, (0, 4)), int_expr(0, (0, 8)), (0, 6)),
+            block_stmt(
+                vec![print_stmt(str_expr("1996", (1, 14)), (1, 8)),],
+                (0, 11)
+            ),
+            Some(print_stmt(int_expr(5, (2, 17)), (2, 11))),
+            (0, 0)
+        ),]),
+        parser.parse()
+    );
+}
+
+#[test]
 fn test_print_stmt() {
     let tokens = get_tokens("print \"1996\";");
     let mut parser = Parser::new(&tokens);
@@ -407,6 +449,7 @@ fn test_missing_close_paren() {
     assert_eq!(
         Err(ParsingError::ExpectedCloseParen(
             Loc::new(0, 4),
+            String::from("expression"),
             String::from("EOF")
         )),
         parser.expression()
@@ -436,6 +479,34 @@ fn test_expected_expression() {
             String::from("if")
         )),
         parser.expression()
+    );
+}
+
+#[test]
+fn test_missing_open_paren_if() {
+    let tokens = get_tokens("if true");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Err(ParsingError::ExpectedOpenParen(
+            Loc::new(0, 3),
+            String::from("if"),
+            String::from("true")
+        )),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_missing_close_paren_if() {
+    let tokens = get_tokens("if (100");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Err(ParsingError::ExpectedCloseParen(
+            Loc::new(0, 7),
+            String::from("if condition"),
+            String::from("EOF")
+        )),
+        parser.parse()
     );
 }
 

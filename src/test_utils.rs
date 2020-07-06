@@ -130,6 +130,15 @@ pub fn expr_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
     Stmt::expression(expr, Loc::new(line, col))
 }
 
+pub fn if_stmt(
+    cond: Expr,
+    then_branch: Stmt,
+    else_branch: Option<Stmt>,
+    (line, col): (usize, usize),
+) -> Stmt {
+    Stmt::if_stmt(cond, then_branch, else_branch, Loc::new(line, col))
+}
+
 pub fn print_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
     Stmt::print(expr, Loc::new(line, col))
 }

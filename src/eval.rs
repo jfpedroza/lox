@@ -203,6 +203,23 @@ impl StmtVisitor<()> for Interpreter {
         Ok(())
     }
 
+    fn visit_if_stmt(
+        &mut self,
+        cond: &Expr,
+        then_branch: &Stmt,
+        else_branch: &Option<Box<Stmt>>,
+        _loc: Loc,
+    ) -> ExecuteRes {
+        let cond_val = self.evaluate(cond)?;
+        if cond_val.is_truthy() {
+            self.execute(then_branch)
+        } else if let Some(else_stmt) = else_branch {
+            self.execute(else_stmt)
+        } else {
+            Ok(())
+        }
+    }
+
     fn visit_print_stmt(&mut self, expr: &Expr, _loc: Loc) -> ExecuteRes {
         let val = self.evaluate(expr)?;
         println!("{}", val);

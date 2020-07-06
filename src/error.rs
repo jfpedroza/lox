@@ -60,8 +60,11 @@ impl Display for ParsingError {
         use ParsingError::*;
         match self {
             ExpectedExpression(loc, got) => write!(f, "[{}] Expected expression. Got {}", loc, got),
-            ExpectedCloseParen(loc, got) => {
-                write!(f, "[{}] Expected ')' after expression. Got {}", loc, got)
+            ExpectedOpenParen(loc, after, got) => {
+                write!(f, "[{}] Expected '(' after '{}'. Got {}", loc, after, got)
+            }
+            ExpectedCloseParen(loc, after, got) => {
+                write!(f, "[{}] Expected ')' after {}. Got {}", loc, after, got)
             }
             ExpectedCloseBrace(loc, got) => {
                 write!(f, "[{}] Expected '}}' after block. Got {}", loc, got)

@@ -4,6 +4,7 @@ use crate::location::{Loc, Located};
 #[derive(PartialEq, Debug)]
 pub enum StmtKind {
     Expression(Expr),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
@@ -17,6 +18,14 @@ pub trait Visitor<Res> {
 
     fn visit_expression_stmt(&mut self, expr: &Expr, loc: Loc) -> Self::Result;
 
+    fn visit_if_stmt(
+        &mut self,
+        cond: &Expr,
+        then_branch: &Stmt,
+        else_branch: &Option<Box<Stmt>>,
+        loc: Loc,
+    ) -> Self::Result;
+
     fn visit_print_stmt(&mut self, expr: &Expr, loc: Loc) -> Self::Result;
 
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> Self::Result;
@@ -27,6 +36,13 @@ pub trait Visitor<Res> {
 impl Stmt {
     pub fn expression(expr: Expr, loc: Loc) -> Self {
         Stmt::new(StmtKind::Expression(expr), loc)
+    }
+
+    pub fn if_stmt(cond: Expr, then_branch: Stmt, else_branch: Option<Stmt>, loc: Loc) -> Self {
+        Stmt::new(
+            StmtKind::If(cond, Box::new(then_branch), else_branch.map(Box::new)),
+            loc,
+        )
     }
 
     pub fn print(expr: Expr, loc: Loc) -> Self {
@@ -48,6 +64,9 @@ impl Stmt {
         use StmtKind::*;
         match &self.kind {
             Expression(expr) => visitor.visit_expression_stmt(expr, self.loc),
+            If(cond, then_branch, else_branch) => {
+                visitor.visit_if_stmt(cond, then_branch, else_branch, self.loc)
+            }
             Print(expr) => visitor.visit_print_stmt(expr, self.loc),
             Var(name, init) => visitor.visit_var_stmt(name, init, self.loc),
             Block(stmts) => visitor.visit_block_stmt(stmts, self.loc),
