@@ -232,7 +232,7 @@ impl<'a> Parser<'a> {
     }
 
     fn conditional(&mut self) -> ExprParseRes {
-        let expr = self.equality()?;
+        let expr = self.or()?;
         if let Some(op_token) = self.matches(&[Question]) {
             let left = self.expression()?;
             self.consume(Colon, Self::expected_colon_error)?;
@@ -241,6 +241,32 @@ impl<'a> Parser<'a> {
         } else {
             Ok(expr)
         }
+    }
+
+    fn or(&mut self) -> ExprParseRes {
+        let mut expr = self.and()?;
+
+        while let Some(op_token) = self.matches(&[Or]) {
+            let op = op_token.kind.into();
+            let right = self.and()?;
+
+            expr = Expr::logical(expr, op, right, op_token.loc);
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> ExprParseRes {
+        let mut expr = self.equality()?;
+
+        while let Some(op_token) = self.matches(&[And]) {
+            let op = op_token.kind.into();
+            let right = self.equality()?;
+
+            expr = Expr::logical(expr, op, right, op_token.loc);
+        }
+
+        Ok(expr)
     }
 
     fn left_binary_expression<F>(&mut self, kinds: &[TokenKind], mut expr_fn: F) -> ExprParseRes
