@@ -81,3 +81,16 @@ impl Stmt {
         }
     }
 }
+
+impl From<Expr> for Stmt {
+    fn from(expr: Expr) -> Self {
+        let loc = expr.loc;
+        Self::expression(expr, loc)
+    }
+}
+
+impl Default for StmtKind {
+    fn default() -> Self {
+        StmtKind::Expression(Expr::default())
+    }
+}

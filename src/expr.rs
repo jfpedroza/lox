@@ -127,6 +127,12 @@ impl Expr {
     }
 }
 
+impl Default for ExprKind {
+    fn default() -> Self {
+        Self::Literal(LitExpr::Nil)
+    }
+}
+
 impl Debug for ExprKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use ExprKind::*;
