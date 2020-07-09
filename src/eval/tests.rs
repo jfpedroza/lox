@@ -289,6 +289,42 @@ fn test_binary_comparison_expr() {
 }
 
 #[test]
+fn test_logical_expr() {
+    for (input, output) in vec![
+        ("true and 5", Integer(5)),
+        ("3.0 and nil", Nil),
+        ("false and 5", Boolean(false)),
+        ("nil and false", Nil),
+        ("3.0 or 5", Float(3.0)),
+        ("\"string\" or false", "string".into()),
+        ("nil or \"car\"", "car".into()),
+        ("false or false", Boolean(false)),
+    ] {
+        test_value_res(input, Ok(output));
+    }
+}
+
+#[test]
+fn test_logical_short_circuit() {
+    for (input, output) in vec![
+        ("true and (hello = 5)", Integer(5)),
+        ("3.0 and (hello = nil)", Nil),
+        ("false and (hello = 5)", "world".into()),
+        ("nil and (hello = false)", "world".into()),
+        ("3.0 or (hello = 5)", "world".into()),
+        ("\"string\" or (hello = false)", "world".into()),
+        ("nil or (hello = \"car\")", "car".into()),
+        ("false or (hello = false)", Boolean(false)),
+    ] {
+        let input = format!(r#"var hello = "world"; {};"#, input);
+        let stmts = get_stmts(&input);
+        let mut inter = Interpreter::new();
+        assert_eq!(Ok(()), inter.interpret(&stmts));
+        assert_eq!(Ok(output), env_get(&inter, "hello"));
+    }
+}
+
+#[test]
 fn test_conditional_expr() {
     for (input, output) in vec![
         ("true ? 30 : 50", Integer(30)),
@@ -297,12 +333,7 @@ fn test_conditional_expr() {
         ("nil? true ? 1 : 2 : 0.0 ? 3 : 4", Integer(3)),
         ("true ? 30 : 50, false ? 7 : 9", Integer(9)),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = inter.evaluate(&expr).unwrap();
-        if !val.equal(&output).is_truthy() {
-            assert_eq!(output, val);
-        }
+        test_value_res(input, Ok(output));
     }
 }
 
@@ -313,12 +344,7 @@ fn test_comma_expr() {
         ("30, \"string\", true", Boolean(true)),
         ("(3 + 5), (4, (7, 88/11))", Integer(8)),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = inter.evaluate(&expr).unwrap();
-        if !val.equal(&output).is_truthy() {
-            assert_eq!(output, val);
-        }
+        test_value_res(input, Ok(output));
     }
 }
 

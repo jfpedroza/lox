@@ -1,5 +1,5 @@
 use crate::eval::RuntimeError;
-use crate::expr::{BinOp, Expr, ExprKind, LitExpr, UnOp};
+use crate::expr::{BinOp, Expr, ExprKind, LitExpr, LogOp, UnOp};
 use crate::lexer::{Scanner, Token};
 use crate::location::Loc;
 use crate::parser::Parser;
@@ -104,6 +104,14 @@ pub fn less_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
 
 pub fn less_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
     Expr::binary(left, BinOp::LessEqual, right, Loc::new(line, col))
+}
+
+pub fn and_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
+    Expr::logical(left, LogOp::And, right, Loc::new(line, col))
+}
+
+pub fn or_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
+    Expr::logical(left, LogOp::Or, right, Loc::new(line, col))
 }
 
 pub fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {

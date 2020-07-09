@@ -211,6 +211,44 @@ fn test_binary_less_equal_expr() {
 }
 
 #[test]
+fn test_logical_and_expr() {
+    let tokens = get_tokens("30 and 100");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(and_expr(
+            int_expr(30, (0, 0)),
+            int_expr(100, (0, 7)),
+            (0, 3)
+        )),
+        parser.expression()
+    );
+}
+
+#[test]
+fn test_logical_or_expr() {
+    let tokens = get_tokens("30 or 100");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(or_expr(int_expr(30, (0, 0)), int_expr(100, (0, 6)), (0, 3))),
+        parser.expression()
+    );
+}
+
+#[test]
+fn test_logical_and_or_expr() {
+    let tokens = get_tokens("30 and true or nil and 5.0");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(or_expr(
+            and_expr(int_expr(30, (0, 0)), bool_expr(true, (0, 7)), (0, 3)),
+            and_expr(nil_expr((0, 15)), float_expr(5.0, (0, 23)), (0, 19)),
+            (0, 12)
+        )),
+        parser.expression()
+    );
+}
+
+#[test]
 fn test_group_expr() {
     let tokens = get_tokens("(30 / 100)");
     let mut parser = Parser::new(&tokens);
@@ -300,29 +338,33 @@ fn test_assign_expr() {
 
 #[test]
 fn test_nested_expr() {
-    let tokens = get_tokens(r#"2 > 3 ? "yes" : (1e4 + 29 - 3.1416) * a/1.0"#);
+    let tokens = get_tokens(r#"2 > 3 and true ? "yes" : (1e4 + 29 - 3.1416) * a/1.0"#);
     let mut parser = Parser::new(&tokens);
     assert_eq!(
         Ok(cond_expr(
-            gt_expr(int_expr(2, (0, 0)), int_expr(3, (0, 4)), (0, 2)),
-            str_expr("yes", (0, 8)),
+            and_expr(
+                gt_expr(int_expr(2, (0, 0)), int_expr(3, (0, 4)), (0, 2)),
+                bool_expr(true, (0, 10)),
+                (0, 6)
+            ),
+            str_expr("yes", (0, 17)),
             div_expr(
                 mult_expr(
                     group_expr(
                         sub_expr(
-                            add_expr(float_expr(10000.0, (0, 17)), int_expr(29, (0, 23)), (0, 21)),
-                            float_expr(3.1416, (0, 28)),
-                            (0, 26)
+                            add_expr(float_expr(10000.0, (0, 26)), int_expr(29, (0, 32)), (0, 30)),
+                            float_expr(3.1416, (0, 37)),
+                            (0, 35)
                         ),
-                        (0, 16)
+                        (0, 25)
                     ),
-                    var_expr("a", (0, 38)),
-                    (0, 36)
+                    var_expr("a", (0, 47)),
+                    (0, 45)
                 ),
-                float_expr(1.0, (0, 40)),
-                (0, 39)
+                float_expr(1.0, (0, 49)),
+                (0, 48)
             ),
-            (0, 6)
+            (0, 15)
         )),
         parser.expression()
     );
