@@ -9,6 +9,7 @@ pub enum StmtKind {
     While(Expr, Box<Stmt>),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
+    Break,
 }
 
 pub type Stmt = Located<StmtKind>;
@@ -34,6 +35,8 @@ pub trait Visitor<Res> {
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> Self::Result;
 
     fn visit_block_stmt(&mut self, stmts: &[Stmt], loc: Loc) -> Self::Result;
+
+    fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
 }
 
 impl Stmt {
@@ -64,6 +67,10 @@ impl Stmt {
         Stmt::new(StmtKind::Block(stmts), loc)
     }
 
+    pub fn break_stmt(loc: Loc) -> Self {
+        Stmt::new(StmtKind::Break, loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -78,6 +85,7 @@ impl Stmt {
             While(expr, body) => visitor.visit_while_stmt(expr, body, self.loc),
             Var(name, init) => visitor.visit_var_stmt(name, init, self.loc),
             Block(stmts) => visitor.visit_block_stmt(stmts, self.loc),
+            Break => visitor.visit_break_stmt(self.loc),
         }
     }
 }

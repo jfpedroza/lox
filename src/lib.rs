@@ -101,15 +101,15 @@ impl Lox {
 
         let mut parser = Parser::new(&tokens);
         parser.allow_expression = true;
-        let mut stmts = parser.parse()?;
+        let stmts = parser.parse()?;
 
         if stmts.len() == 1 {
-            match stmts.pop().unwrap() {
+            match stmts.first().unwrap() {
                 Stmt {
                     kind: StmtKind::Expression(expr),
                     ..
                 } => {
-                    let val = self.inter.evaluate(&expr)?;
+                    let val = self.inter.evaluate(expr)?;
                     let output = match val {
                         Value::Integer(int) => Blue.paint(int.to_string()),
                         Value::Float(float) => Cyan.paint(float.to_string()),
@@ -121,8 +121,8 @@ impl Lox {
                     };
                     println!("=> {}", output);
                 }
-                stmt => {
-                    self.inter.execute(&stmt)?;
+                _ => {
+                    self.inter.interpret(&stmts)?;
                 }
             }
         } else {

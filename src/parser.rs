@@ -141,6 +141,9 @@ impl<'a> Parser<'a> {
             self.for_statement()
         } else if let Some(token) = self.matches(&[LeftBrace]) {
             Ok(Stmt::block(self.block()?, token.loc))
+        } else if let Some(token) = self.matches(&[Break]) {
+            self.consume(Semicolon, |p| p.expected_semicolon_error("'break'"))?;
+            Ok(Stmt::break_stmt(token.loc))
         } else {
             self.expression_statement()
         }
@@ -217,9 +220,9 @@ impl<'a> Parser<'a> {
         }
 
         let while_stmt = Stmt::while_stmt(cond, body, *loc);
-        Ok(if let Some(init_expr) = init {
-            let init_loc = init_expr.loc;
-            Stmt::block(vec![init_expr.into(), while_stmt], init_loc)
+        Ok(if let Some(init_stmt) = init {
+            let init_loc = init_stmt.loc;
+            Stmt::block(vec![init_stmt, while_stmt], init_loc)
         } else {
             while_stmt
         })
