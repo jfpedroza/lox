@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{BinOp, Expr, LitExpr, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
 use crate::value::Value;
@@ -166,6 +166,16 @@ impl ExprVisitor<Value> for Interpreter {
             BinOp::GreaterEqual => left_val.greater_eq(&right_val, loc)?,
             BinOp::Less => left_val.less(&right_val, loc)?,
             BinOp::LessEqual => left_val.less_eq(&right_val, loc)?,
+        })
+    }
+
+    fn visit_logical_expr(&mut self, left: &Expr, op: &LogOp, right: &Expr, _loc: Loc) -> ValueRes {
+        let left_val = self.evaluate(left)?;
+
+        Ok(match op {
+            LogOp::And if !left_val.is_truthy() => left_val,
+            LogOp::Or if left_val.is_truthy() => left_val,
+            _ => self.evaluate(right)?,
         })
     }
 
