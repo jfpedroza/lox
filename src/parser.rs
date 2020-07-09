@@ -135,6 +135,8 @@ impl<'a> Parser<'a> {
             self.if_statement()
         } else if self.matches(&[Print]).is_some() {
             self.print_statement()
+        } else if self.matches(&[While]).is_some() {
+            self.while_statement()
         } else if let Some(token) = self.matches(&[LeftBrace]) {
             Ok(Stmt::block(self.block()?, token.loc))
         } else {
@@ -162,6 +164,19 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(Semicolon, |p| p.expected_semicolon_error("value"))?;
         Ok(Stmt::print(expr, *loc))
+    }
+
+    fn while_statement(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        self.consume(LeftParen, |p| p.expected_open_paren_error("while"))?;
+        let cond = self.expression()?;
+        self.consume(RightParen, |p| {
+            p.expected_close_paren_error("while condition")
+        })?;
+
+        let body = self.statement()?;
+
+        Ok(Stmt::while_stmt(cond, body, *loc))
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, ParsingError> {

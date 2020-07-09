@@ -236,6 +236,14 @@ impl StmtVisitor<()> for Interpreter {
         Ok(())
     }
 
+    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ExecuteRes {
+        while self.evaluate(cond)?.is_truthy() {
+            self.execute(body)?;
+        }
+
+        Ok(())
+    }
+
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, _loc: Loc) -> ExecuteRes {
         let init_val = if let Some(expr) = init {
             self.evaluate(expr)?
