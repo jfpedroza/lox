@@ -1,3 +1,5 @@
+#![feature(associated_type_defaults)]
+
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
@@ -32,6 +34,7 @@ pub struct Lox {
 }
 
 impl Lox {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Lox {
             inter: Interpreter::new(),
@@ -45,7 +48,7 @@ impl Lox {
         let mut parser = Parser::new(&tokens);
         let stmts = parser.parse()?;
 
-        self.inter.interpret(stmts)?;
+        self.inter.interpret(&stmts)?;
 
         Ok(())
     }
@@ -71,7 +74,7 @@ impl Lox {
         let mut rl = Editor::<()>::new();
         rl.set_auto_add_history(true);
 
-        println!("Lox 0.0.2");
+        println!("Lox 0.0.3");
         println!("Press Ctrl+D to exit\n");
 
         let prompt = format!("{}> ", Blue.bold().paint("lox"));
@@ -98,10 +101,10 @@ impl Lox {
 
         let mut parser = Parser::new(&tokens);
         parser.allow_expression = true;
-        let mut stmts = parser.parse()?;
+        let stmts = parser.parse()?;
 
         if stmts.len() == 1 {
-            match stmts.pop().unwrap() {
+            match stmts.first().unwrap() {
                 Stmt {
                     kind: StmtKind::Expression(expr),
                     ..
@@ -118,12 +121,12 @@ impl Lox {
                     };
                     println!("=> {}", output);
                 }
-                stmt => {
-                    self.inter.execute(stmt)?;
+                _ => {
+                    self.inter.interpret(&stmts)?;
                 }
             }
         } else {
-            self.inter.interpret(stmts)?;
+            self.inter.interpret(&stmts)?;
         }
 
         Ok(())

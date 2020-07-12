@@ -9,7 +9,7 @@ pub fn env_get(inter: &Interpreter, name: &str) -> ValueRes {
 fn test_value_res(input: &str, expected: ValueRes) {
     let expr = get_expr(input);
     let mut inter = Interpreter::new();
-    match (inter.evaluate(expr), expected) {
+    match (inter.evaluate(&expr), expected) {
         (Ok(val), Ok(output)) if val.equal(&output).is_truthy() => {}
         (got, expected) => assert_eq!(expected, got),
     }
@@ -19,42 +19,42 @@ fn test_value_res(input: &str, expected: ValueRes) {
 fn test_integer_expr() {
     let expr = get_expr("1996");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Integer(1996)), inter.evaluate(expr));
+    assert_eq!(Ok(Integer(1996)), inter.evaluate(&expr));
 }
 
 #[test]
 fn test_float_expr() {
     let expr = get_expr("8.5");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Float(8.5)), inter.evaluate(expr));
+    assert_eq!(Ok(Float(8.5)), inter.evaluate(&expr));
 }
 
 #[test]
 fn test_string_expr() {
     let expr = get_expr("\"1996\"");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok("1996".into()), inter.evaluate(expr));
+    assert_eq!(Ok("1996".into()), inter.evaluate(&expr));
 }
 
 #[test]
 fn test_true_expr() {
     let expr = get_expr("true");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Boolean(true)), inter.evaluate(expr));
+    assert_eq!(Ok(Boolean(true)), inter.evaluate(&expr));
 }
 
 #[test]
 fn test_false_expr() {
     let expr = get_expr("false");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Boolean(false)), inter.evaluate(expr));
+    assert_eq!(Ok(Boolean(false)), inter.evaluate(&expr));
 }
 
 #[test]
 fn test_nil_expr() {
     let expr = get_expr("nil");
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(Nil), inter.evaluate(expr));
+    assert_eq!(Ok(Nil), inter.evaluate(&expr));
 }
 
 #[test]
@@ -71,7 +71,7 @@ fn test_unary_not_expr() {
     ] {
         let expr = get_expr(input);
         let mut inter = Interpreter::new();
-        assert_eq!(Ok(Boolean(output)), inter.evaluate(expr));
+        assert_eq!(Ok(Boolean(output)), inter.evaluate(&expr));
     }
 }
 
@@ -289,6 +289,42 @@ fn test_binary_comparison_expr() {
 }
 
 #[test]
+fn test_logical_expr() {
+    for (input, output) in vec![
+        ("true and 5", Integer(5)),
+        ("3.0 and nil", Nil),
+        ("false and 5", Boolean(false)),
+        ("nil and false", Nil),
+        ("3.0 or 5", Float(3.0)),
+        ("\"string\" or false", "string".into()),
+        ("nil or \"car\"", "car".into()),
+        ("false or false", Boolean(false)),
+    ] {
+        test_value_res(input, Ok(output));
+    }
+}
+
+#[test]
+fn test_logical_short_circuit() {
+    for (input, output) in vec![
+        ("true and (hello = 5)", Integer(5)),
+        ("3.0 and (hello = nil)", Nil),
+        ("false and (hello = 5)", "world".into()),
+        ("nil and (hello = false)", "world".into()),
+        ("3.0 or (hello = 5)", "world".into()),
+        ("\"string\" or (hello = false)", "world".into()),
+        ("nil or (hello = \"car\")", "car".into()),
+        ("false or (hello = false)", Boolean(false)),
+    ] {
+        let input = format!(r#"var hello = "world"; {};"#, input);
+        let stmts = get_stmts(&input);
+        let mut inter = Interpreter::new();
+        assert_eq!(Ok(()), inter.interpret(&stmts));
+        assert_eq!(Ok(output), env_get(&inter, "hello"));
+    }
+}
+
+#[test]
 fn test_conditional_expr() {
     for (input, output) in vec![
         ("true ? 30 : 50", Integer(30)),
@@ -297,12 +333,7 @@ fn test_conditional_expr() {
         ("nil? true ? 1 : 2 : 0.0 ? 3 : 4", Integer(3)),
         ("true ? 30 : 50, false ? 7 : 9", Integer(9)),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = inter.evaluate(expr).unwrap();
-        if !val.equal(&output).is_truthy() {
-            assert_eq!(output, val);
-        }
+        test_value_res(input, Ok(output));
     }
 }
 
@@ -313,12 +344,7 @@ fn test_comma_expr() {
         ("30, \"string\", true", Boolean(true)),
         ("(3 + 5), (4, (7, 88/11))", Integer(8)),
     ] {
-        let expr = get_expr(input);
-        let mut inter = Interpreter::new();
-        let val = inter.evaluate(expr).unwrap();
-        if !val.equal(&output).is_truthy() {
-            assert_eq!(output, val);
-        }
+        test_value_res(input, Ok(output));
     }
 }
 
@@ -338,7 +364,7 @@ fn test_division_by_zero() {
         let mut inter = Interpreter::new();
         assert_eq!(
             Err(RuntimeError::DivisionByZero(Loc::new(0, col),)),
-            inter.evaluate(expr)
+            inter.evaluate(&expr)
         );
     }
 }
@@ -348,7 +374,7 @@ fn test_empty_stmt() {
     let input = "";
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
 }
 
 #[test]
@@ -356,7 +382,7 @@ fn test_var_stmt() {
     let input = r#"var hello = "world";"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
 }
 
@@ -367,7 +393,7 @@ fn test_var_assignment() {
     hello = "Earth";"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
 
@@ -380,7 +406,7 @@ fn test_var_assignment_in_block() {
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
 
@@ -393,8 +419,60 @@ fn test_var_shadowing() {
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_stmt_true() {
+    let input = r#"var hello;
+    if (3 > 2) {
+        hello = "world";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_stmt_false() {
+    let input = r#"var hello;
+    if (3 < 2) {
+        hello = "world";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(Nil), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_else_stmt_true() {
+    let input = r#"var hello;
+    if (3 > 2) {
+        hello = "world";
+    } else {
+        hello = "Earth";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
+}
+
+#[test]
+fn test_if_else_stmt_false() {
+    let input = r#"var hello;
+    if (3 < 2) {
+        hello = "world";
+    } else {
+        hello = "Earth";
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
 
 #[test]
@@ -403,7 +481,41 @@ fn test_var_print() {
     print hello;"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
-    assert_eq!(Ok(()), inter.interpret(stmts));
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+}
+
+#[test]
+fn test_while_stmt() {
+    let input = r#"var i = 0;
+    while (i < 10) {
+        i = i + 1;
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(10.into()), env_get(&inter, "i"));
+}
+
+#[test]
+fn test_for_stmt() {
+    let input = r#"var i;
+    for (i = 0; i < 10; i = i + 1) {}"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(10.into()), env_get(&inter, "i"));
+}
+
+#[test]
+fn test_for_break_stmt() {
+    let input = r#"var i;
+    for (i = 0; ; i = i + 1) {
+        if (i == 10) break;
+    }"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(10.into()), env_get(&inter, "i"));
 }
 
 #[test]
@@ -416,7 +528,7 @@ fn test_undefined_variable() {
             Loc::new(0, 0),
             String::from("hello")
         )),
-        inter.interpret(stmts)
+        inter.interpret(&stmts)
     );
 }
 
@@ -430,6 +542,6 @@ fn test_undefined_variable_in_assignment() {
             Loc::new(0, 0),
             String::from("hello")
         )),
-        inter.interpret(stmts)
+        inter.interpret(&stmts)
     );
 }

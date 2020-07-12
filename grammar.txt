@@ -6,17 +6,27 @@ declaration    → varDecl
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 
 statement      → exprStmt
+               | ifStmt
                | printStmt
+               | whileStmt
                | block ;
+               | break ;
 
 exprStmt       → expression ";" ;
+ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
 printStmt      → "print" expression ";" ;
+whileStmt      → "while" "(" expression ")" statement ;
+forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+                           expression? ";"
+                           expression? ")" statement ;
 block          → "{" declaration* "}" ;
 
 expression     → assignment ( "," expression )? ;
 assignment     → IDENTIFIER "=" assignment
                | conditional ;
-conditional    → equality ( "?" expression : conditional )? ;
+conditional    → logic_or ( "?" expression : conditional )? ;
+logic_or       → logic_and ( "or" logic_and )* ;
+logic_and      → equality ( "and" equality )* ;
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 addition       → multiplication ( ( "-" | "+" ) multiplication )* ;

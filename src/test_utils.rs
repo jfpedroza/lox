@@ -1,5 +1,5 @@
 use crate::eval::RuntimeError;
-use crate::expr::{BinOp, Expr, ExprKind, LitExpr, UnOp};
+use crate::expr::{BinOp, Expr, ExprKind, LitExpr, LogOp, UnOp};
 use crate::lexer::{Scanner, Token};
 use crate::location::Loc;
 use crate::parser::Parser;
@@ -106,8 +106,16 @@ pub fn less_eq_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Exp
     Expr::binary(left, BinOp::LessEqual, right, Loc::new(line, col))
 }
 
+pub fn and_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
+    Expr::logical(left, LogOp::And, right, Loc::new(line, col))
+}
+
+pub fn or_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
+    Expr::logical(left, LogOp::Or, right, Loc::new(line, col))
+}
+
 pub fn group_expr(expr: Expr, (line, col): (usize, usize)) -> Expr {
-    Expr::groping(expr, Loc::new(line, col))
+    Expr::grouping(expr, Loc::new(line, col))
 }
 
 pub fn comma_expr(left: Expr, right: Expr, (line, col): (usize, usize)) -> Expr {
@@ -130,8 +138,42 @@ pub fn expr_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
     Stmt::expression(expr, Loc::new(line, col))
 }
 
+pub fn if_stmt(
+    cond: Expr,
+    then_branch: Stmt,
+    else_branch: Option<Stmt>,
+    (line, col): (usize, usize),
+) -> Stmt {
+    Stmt::if_stmt(cond, then_branch, else_branch, Loc::new(line, col))
+}
+
 pub fn print_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
     Stmt::print(expr, Loc::new(line, col))
+}
+
+pub fn while_stmt(cond: Expr, body: Stmt, (line, col): (usize, usize)) -> Stmt {
+    Stmt::while_stmt(cond, body, Loc::new(line, col))
+}
+
+pub fn for_stmt(
+    init: Option<Stmt>,
+    cond: Expr,
+    increment: Option<Expr>,
+    mut body: Stmt,
+    (line, col): (usize, usize),
+) -> Stmt {
+    if let Some(inc_expr) = increment {
+        let body_loc = body.loc;
+        body = Stmt::block(vec![body, inc_expr.into()], body_loc);
+    }
+
+    let while_stmt = Stmt::while_stmt(cond, body, Loc::new(line, col));
+    if let Some(init_stmt) = init {
+        let init_loc = init_stmt.loc;
+        Stmt::block(vec![init_stmt, while_stmt], init_loc)
+    } else {
+        while_stmt
+    }
 }
 
 pub fn var_stmt(name: &str, init: Option<Expr>, (line, col): (usize, usize)) -> Stmt {
@@ -140,6 +182,10 @@ pub fn var_stmt(name: &str, init: Option<Expr>, (line, col): (usize, usize)) -> 
 
 pub fn block_stmt(stmts: Vec<Stmt>, (line, col): (usize, usize)) -> Stmt {
     Stmt::block(stmts, Loc::new(line, col))
+}
+
+pub fn break_stmt((line, col): (usize, usize)) -> Stmt {
+    Stmt::break_stmt(Loc::new(line, col))
 }
 
 pub fn unsup_op(op: &str, operand_type: &str, (line, col): (usize, usize)) -> RuntimeError {

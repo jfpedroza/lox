@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{BinOp, Expr, ExprKind, UnOp};
+use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, StmtKind};
+use crate::stmt::{Stmt, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -35,39 +35,39 @@ pub enum RuntimeError {
     UndefinedVariable(Loc, String),
 }
 
-type ValueRes = Result<Value, RuntimeError>;
-type ExecuteRes = Result<(), RuntimeError>;
-
-trait Evaluable<Res> {
-    type Error;
-
-    fn evaluate(self, inter: &mut Interpreter) -> Result<Res, Self::Error>;
+#[derive(Debug)]
+pub enum RuntimeInterrupt {
+    Error(RuntimeError),
+    Break,
 }
+
+type ValueRes = Result<Value, RuntimeError>;
+type ExecuteRes = Result<(), RuntimeInterrupt>;
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            env: Environ::new().to_rc(),
+            env: Environ::new().into(),
         }
     }
 
-    pub fn interpret(&mut self, stmts: Vec<Stmt>) -> ExecuteRes {
+    pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
         for stmt in stmts {
-            self.execute(stmt)?;
+            self.execute(stmt).map_err(RuntimeInterrupt::expect_error)?
         }
 
         Ok(())
     }
 
-    pub fn evaluate<T: Into<Expr>>(&mut self, expr: T) -> ValueRes {
-        expr.into().evaluate(self)
+    pub fn evaluate(&mut self, expr: &Expr) -> ValueRes {
+        expr.accept(self)
     }
 
-    pub fn execute<T: Into<Stmt>>(&mut self, stmt: T) -> ExecuteRes {
-        stmt.into().evaluate(self)
+    fn execute(&mut self, stmt: &Stmt) -> ExecuteRes {
+        stmt.accept(self)
     }
 
-    fn execute_block(&mut self, stmts: Vec<Stmt>, env: Env) -> ExecuteRes {
+    fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
         let prev = Rc::clone(&self.env);
         self.env = env;
 
@@ -100,15 +100,11 @@ impl Environ {
             enclosing: Some(Rc::clone(enclosing)),
         };
 
-        env.to_rc()
+        env.into()
     }
 
-    pub fn to_rc(self) -> Env {
-        Rc::new(RefCell::new(self))
-    }
-
-    pub fn define(&mut self, name: String, val: Value) {
-        self.values.insert(name, val);
+    pub fn define(&mut self, name: &str, val: Value) {
+        self.values.insert(String::from(name), val);
     }
 
     pub fn get(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
@@ -121,9 +117,9 @@ impl Environ {
         }
     }
 
-    pub fn assign(&mut self, name: String, val: Value, loc: Loc) -> Result<(), RuntimeError> {
-        if self.values.contains_key(&name) {
-            self.values.insert(name, val);
+    pub fn assign(&mut self, name: &str, val: Value, loc: Loc) -> Result<(), RuntimeError> {
+        if self.values.contains_key(name) {
+            self.values.insert(String::from(name), val);
 
             Ok(())
         } else if let Some(ref env) = self.enclosing {
@@ -134,89 +130,149 @@ impl Environ {
     }
 }
 
-impl Evaluable<Value> for Expr {
-    type Error = RuntimeError;
-
-    fn evaluate(self, inter: &mut Interpreter) -> ValueRes {
-        use ExprKind::*;
-        Ok(match self.kind {
-            Literal(literal) => literal.into(),
-            Grouping(expr) => inter.evaluate(expr)?,
-            Unary(op, expr) => {
-                let val = inter.evaluate(expr)?;
-
-                match op {
-                    UnOp::Negate => val.negate(self.loc)?,
-                    UnOp::Not => val.not(),
-                }
-            }
-            Binary(left, op, right) => {
-                let left_val = inter.evaluate(left)?;
-                let right_val = inter.evaluate(right)?;
-
-                match op {
-                    BinOp::Add => left_val.add(right_val, self.loc)?,
-                    BinOp::Sub => left_val.sub(right_val, self.loc)?,
-                    BinOp::Mul => left_val.mul(right_val, self.loc)?,
-                    BinOp::Div => left_val.div(right_val, self.loc)?,
-                    BinOp::Rem => left_val.rem(right_val, self.loc)?,
-                    BinOp::Equal => left_val.equal(&right_val),
-                    BinOp::NotEqual => left_val.not_eq(&right_val),
-                    BinOp::Greater => left_val.greater(&right_val, self.loc)?,
-                    BinOp::GreaterEqual => left_val.greater_eq(&right_val, self.loc)?,
-                    BinOp::Less => left_val.less(&right_val, self.loc)?,
-                    BinOp::LessEqual => left_val.less_eq(&right_val, self.loc)?,
-                }
-            }
-            Comma(left, right) => {
-                let _ = inter.evaluate(left)?;
-                inter.evaluate(right)?
-            }
-            Conditional(cond, left, right) => {
-                let cond_val = inter.evaluate(cond)?;
-                if cond_val.is_truthy() {
-                    inter.evaluate(left)?
-                } else {
-                    inter.evaluate(right)?
-                }
-            }
-            Variable(name) => inter.env.borrow().get(&name, self.loc)?,
-            Assign(name, expr) => {
-                let val = inter.evaluate(expr)?;
-                let cloned_val = val.clone();
-                inter.env.borrow_mut().assign(name, val, self.loc)?;
-                cloned_val
-            }
-        })
+impl Into<Env> for Environ {
+    fn into(self) -> Env {
+        Rc::new(RefCell::new(self))
     }
 }
 
-impl Evaluable<()> for Stmt {
+impl ExprVisitor<Value> for Interpreter {
     type Error = RuntimeError;
 
-    fn evaluate(self, inter: &mut Interpreter) -> Result<(), Self::Error> {
-        use StmtKind::*;
-        Ok(match self.kind {
-            Expression(expr) => {
-                inter.evaluate(expr)?;
-            }
-            Print(expr) => {
-                let val = inter.evaluate(expr)?;
-                println!("{}", val);
-            }
-            Var(name, init) => {
-                let init_val = if let Some(expr) = init {
-                    inter.evaluate(expr)?
-                } else {
-                    Value::Nil
-                };
+    fn visit_literal_expr(&mut self, literal: &LitExpr, _loc: Loc) -> ValueRes {
+        Ok(literal.into())
+    }
 
-                inter.env.borrow_mut().define(name, init_val);
-            }
-            Block(stmts) => {
-                inter.execute_block(stmts, Environ::with_enclosing(&inter.env))?;
-            }
+    fn visit_grouping_expr(&mut self, expr: &Expr, _loc: Loc) -> ValueRes {
+        self.evaluate(expr)
+    }
+
+    fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> ValueRes {
+        let val = self.evaluate(expr)?;
+
+        Ok(match op {
+            UnOp::Negate => val.negate(loc)?,
+            UnOp::Not => val.not(),
         })
+    }
+
+    fn visit_binary_expr(&mut self, left: &Expr, op: &BinOp, right: &Expr, loc: Loc) -> ValueRes {
+        let left_val = self.evaluate(left)?;
+        let right_val = self.evaluate(right)?;
+
+        Ok(match op {
+            BinOp::Add => left_val.add(right_val, loc)?,
+            BinOp::Sub => left_val.sub(right_val, loc)?,
+            BinOp::Mul => left_val.mul(right_val, loc)?,
+            BinOp::Div => left_val.div(right_val, loc)?,
+            BinOp::Rem => left_val.rem(right_val, loc)?,
+            BinOp::Equal => left_val.equal(&right_val),
+            BinOp::NotEqual => left_val.not_eq(&right_val),
+            BinOp::Greater => left_val.greater(&right_val, loc)?,
+            BinOp::GreaterEqual => left_val.greater_eq(&right_val, loc)?,
+            BinOp::Less => left_val.less(&right_val, loc)?,
+            BinOp::LessEqual => left_val.less_eq(&right_val, loc)?,
+        })
+    }
+
+    fn visit_logical_expr(&mut self, left: &Expr, op: &LogOp, right: &Expr, _loc: Loc) -> ValueRes {
+        let left_val = self.evaluate(left)?;
+
+        Ok(match op {
+            LogOp::And if !left_val.is_truthy() => left_val,
+            LogOp::Or if left_val.is_truthy() => left_val,
+            _ => self.evaluate(right)?,
+        })
+    }
+
+    fn visit_comma_expr(&mut self, left: &Expr, right: &Expr, _loc: Loc) -> ValueRes {
+        let _ = self.evaluate(left)?;
+        self.evaluate(right)
+    }
+
+    fn visit_cond_expr(&mut self, cond: &Expr, left: &Expr, right: &Expr, _loc: Loc) -> ValueRes {
+        let cond_val = self.evaluate(cond)?;
+        if cond_val.is_truthy() {
+            self.evaluate(left)
+        } else {
+            self.evaluate(right)
+        }
+    }
+
+    fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> ValueRes {
+        self.env.borrow().get(&name, loc)
+    }
+
+    fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
+        let val = self.evaluate(expr)?;
+        let cloned_val = val.clone();
+        self.env.borrow_mut().assign(name, val, loc)?;
+        Ok(cloned_val)
+    }
+}
+
+impl StmtVisitor<()> for Interpreter {
+    type Error = RuntimeInterrupt;
+
+    fn visit_expression_stmt(&mut self, expr: &Expr, _loc: Loc) -> ExecuteRes {
+        self.evaluate(expr)?;
+        Ok(())
+    }
+
+    fn visit_if_stmt(
+        &mut self,
+        cond: &Expr,
+        then_branch: &Stmt,
+        else_branch: &Option<Box<Stmt>>,
+        _loc: Loc,
+    ) -> ExecuteRes {
+        let cond_val = self.evaluate(cond)?;
+        if cond_val.is_truthy() {
+            self.execute(then_branch)
+        } else if let Some(else_stmt) = else_branch {
+            self.execute(else_stmt)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn visit_print_stmt(&mut self, expr: &Expr, _loc: Loc) -> ExecuteRes {
+        let val = self.evaluate(expr)?;
+        println!("{}", val);
+        Ok(())
+    }
+
+    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ExecuteRes {
+        while self.evaluate(cond)?.is_truthy() {
+            match self.execute(body) {
+                Ok(()) => (),
+                Err(RuntimeInterrupt::Break) => break,
+                Err(interrupt) => {
+                    return Err(interrupt);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, _loc: Loc) -> ExecuteRes {
+        let init_val = if let Some(expr) = init {
+            self.evaluate(expr)?
+        } else {
+            Value::Nil
+        };
+
+        self.env.borrow_mut().define(name, init_val);
+        Ok(())
+    }
+
+    fn visit_block_stmt(&mut self, stmts: &[Stmt], _loc: Loc) -> ExecuteRes {
+        self.execute_block(stmts, Environ::with_enclosing(&self.env))
+    }
+
+    fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
+        Err(RuntimeInterrupt::Break)
     }
 }
 
@@ -359,5 +415,24 @@ impl RuntimeError {
 
     fn undefined_variable(loc: Loc, name: &str) -> Self {
         Self::UndefinedVariable(loc, String::from(name))
+    }
+}
+
+impl RuntimeInterrupt {
+    fn expect_error(self) -> RuntimeError {
+        use RuntimeInterrupt::*;
+        match self {
+            Error(error) => error,
+            interrupt => panic!(
+                "Expected interrupt to be an error at this point. Got: {:?}",
+                interrupt
+            ),
+        }
+    }
+}
+
+impl From<RuntimeError> for RuntimeInterrupt {
+    fn from(error: RuntimeError) -> Self {
+        Self::Error(error)
     }
 }

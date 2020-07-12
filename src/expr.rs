@@ -7,6 +7,7 @@ pub enum ExprKind {
     Literal(LitExpr),
     Unary(UnOp, Box<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
+    Logical(Box<Expr>, LogOp, Box<Expr>),
     Grouping(Box<Expr>),
     Comma(Box<Expr>, Box<Expr>),
     Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
@@ -15,6 +16,42 @@ pub enum ExprKind {
 }
 
 pub type Expr = Located<ExprKind>;
+
+pub trait Visitor<Res> {
+    type Error;
+    type Result = std::result::Result<Res, Self::Error>;
+
+    fn visit_literal_expr(&mut self, literal: &LitExpr, loc: Loc) -> Self::Result;
+
+    fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_binary_expr(
+        &mut self,
+        left: &Expr,
+        op: &BinOp,
+        right: &Expr,
+        loc: Loc,
+    ) -> Self::Result;
+
+    fn visit_logical_expr(
+        &mut self,
+        left: &Expr,
+        op: &LogOp,
+        right: &Expr,
+        loc: Loc,
+    ) -> Self::Result;
+
+    fn visit_grouping_expr(&mut self, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_comma_expr(&mut self, left: &Expr, right: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_cond_expr(&mut self, cond: &Expr, left: &Expr, right: &Expr, loc: Loc)
+        -> Self::Result;
+
+    fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> Self::Result;
+
+    fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+}
 
 impl Expr {
     pub fn from_literal(literal: &Literal, loc: Loc) -> Self {
@@ -44,7 +81,11 @@ impl Expr {
         Expr::new(ExprKind::Binary(Box::new(left), op, Box::new(right)), loc)
     }
 
-    pub fn groping(expr: Expr, loc: Loc) -> Self {
+    pub fn logical(left: Expr, op: LogOp, right: Expr, loc: Loc) -> Self {
+        Expr::new(ExprKind::Logical(Box::new(left), op, Box::new(right)), loc)
+    }
+
+    pub fn grouping(expr: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Grouping(Box::new(expr)), loc)
     }
 
@@ -66,6 +107,30 @@ impl Expr {
     pub fn assign(name: String, expr: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Assign(name, Box::new(expr)), loc)
     }
+
+    pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
+    where
+        Vis: Visitor<Res, Error = Error>,
+    {
+        use ExprKind::*;
+        match &self.kind {
+            Literal(literal) => visitor.visit_literal_expr(literal, self.loc),
+            Unary(op, expr) => visitor.visit_unary_expr(op, expr, self.loc),
+            Binary(left, op, right) => visitor.visit_binary_expr(left, op, right, self.loc),
+            Logical(left, op, right) => visitor.visit_logical_expr(left, op, right, self.loc),
+            Grouping(expr) => visitor.visit_grouping_expr(expr, self.loc),
+            Comma(left, right) => visitor.visit_comma_expr(left, right, self.loc),
+            Conditional(cond, left, right) => visitor.visit_cond_expr(cond, left, right, self.loc),
+            Variable(name) => visitor.visit_variable_expr(name, self.loc),
+            Assign(name, expr) => visitor.visit_assign_expr(name, expr, self.loc),
+        }
+    }
+}
+
+impl Default for ExprKind {
+    fn default() -> Self {
+        Self::Literal(LitExpr::Nil)
+    }
 }
 
 impl Debug for ExprKind {
@@ -75,6 +140,7 @@ impl Debug for ExprKind {
             Literal(literal) => literal.to_string(),
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
+            Logical(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
             Grouping(expr) => parenthesize("group", &[expr]),
             Comma(left, right) => parenthesize("comma", &[left, right]),
             Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
@@ -198,6 +264,33 @@ impl From<TokenKind> for BinOp {
             Less => BinOp::Less,
             LessEqual => BinOp::LessEqual,
             kind => panic!("Token kind '{:?}' is not a binary operator", kind),
+        }
+    }
+}
+
+#[derive(PartialEq)]
+pub enum LogOp {
+    And,
+    Or,
+}
+
+impl LogOp {
+    fn to_string(&self) -> &'static str {
+        use LogOp::*;
+        match self {
+            And => "and",
+            Or => "or",
+        }
+    }
+}
+
+impl From<TokenKind> for LogOp {
+    fn from(kind: TokenKind) -> Self {
+        use TokenKind::*;
+        match kind {
+            And => LogOp::And,
+            Or => LogOp::Or,
+            kind => panic!("Token kind '{:?}' is not a logical operator", kind),
         }
     }
 }

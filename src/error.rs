@@ -15,9 +15,8 @@ pub fn print_err(err: &Error) {
 }
 
 fn error_type(err: &Error) -> &'static str {
-    if err.downcast_ref::<ScanningError>().is_some() {
-        "SyntaxError"
-    } else if err.downcast_ref::<ParsingError>().is_some() {
+    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
+    {
         "SyntaxError"
     } else if err.downcast_ref::<RuntimeError>().is_some() {
         "RuntimeError"
@@ -27,9 +26,8 @@ fn error_type(err: &Error) -> &'static str {
 }
 
 pub fn exit_code(err: &Error) -> i32 {
-    if err.downcast_ref::<ScanningError>().is_some() {
-        65
-    } else if err.downcast_ref::<ParsingError>().is_some() {
+    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
+    {
         65
     } else if err.downcast_ref::<RuntimeError>().is_some() {
         70
@@ -62,8 +60,11 @@ impl Display for ParsingError {
         use ParsingError::*;
         match self {
             ExpectedExpression(loc, got) => write!(f, "[{}] Expected expression. Got {}", loc, got),
-            ExpectedCloseParen(loc, got) => {
-                write!(f, "[{}] Expected ')' after expression. Got {}", loc, got)
+            ExpectedOpenParen(loc, after, got) => {
+                write!(f, "[{}] Expected '(' after '{}'. Got {}", loc, after, got)
+            }
+            ExpectedCloseParen(loc, after, got) => {
+                write!(f, "[{}] Expected ')' after {}. Got {}", loc, after, got)
             }
             ExpectedCloseBrace(loc, got) => {
                 write!(f, "[{}] Expected '}}' after block. Got {}", loc, got)

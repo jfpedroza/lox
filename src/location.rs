@@ -45,8 +45,11 @@ impl<T: PartialEq + Debug> Debug for Located<T> {
     }
 }
 
-impl<T: PartialEq> From<Box<Located<T>>> for Located<T> {
-    fn from(boxed: Box<Located<T>>) -> Self {
-        *boxed
+impl<T: PartialEq + Default> Default for Located<T> {
+    fn default() -> Self {
+        Self {
+            kind: Default::default(),
+            loc: Default::default(),
+        }
     }
 }
