@@ -487,6 +487,23 @@ fn test_for_stmt() {
 }
 
 #[test]
+fn test_empty_for_stmt() {
+    let input = r#"for (;;) {}"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![for_stmt(
+            None,
+            bool_expr(true, (0, 6)),
+            None,
+            block_stmt(vec![], (0, 9)),
+            (0, 0)
+        )]),
+        parser.parse()
+    );
+}
+
+#[test]
 fn test_var_stmt() {
     let tokens = get_tokens("var pi = 3.1416;");
     let mut parser = Parser::new(&tokens);
