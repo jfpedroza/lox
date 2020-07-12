@@ -398,6 +398,21 @@ fn test_var_assignment() {
 }
 
 #[test]
+fn test_var_assignment2() {
+    let input = r#"var i = 0;
+    i += 1;
+    i -= 3;
+    i *= -15;
+    i /= 3;
+    i %= 4;
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(2.into()), env_get(&inter, "i"));
+}
+
+#[test]
 fn test_var_assignment_in_block() {
     let input = r#"var hello = "world";
     {
@@ -488,7 +503,7 @@ fn test_var_print() {
 fn test_while_stmt() {
     let input = r#"var i = 0;
     while (i < 10) {
-        i = i + 1;
+        i += 1;
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
@@ -499,7 +514,7 @@ fn test_while_stmt() {
 #[test]
 fn test_for_stmt() {
     let input = r#"var i;
-    for (i = 0; i < 10; i = i + 1) {}"#;
+    for (i = 0; i < 10; i += 1) {}"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
@@ -509,7 +524,7 @@ fn test_for_stmt() {
 #[test]
 fn test_for_break_stmt() {
     let input = r#"var i;
-    for (i = 0; ; i = i + 1) {
+    for (i = 0; ; i += 1) {
         if (i == 10) break;
     }"#;
     let stmts = get_stmts(input);

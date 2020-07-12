@@ -22,7 +22,7 @@ forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
 block          → "{" declaration* "}" ;
 
 expression     → assignment ( "," expression )? ;
-assignment     → IDENTIFIER "=" assignment
+assignment     → IDENTIFIER assignment_op assignment
                | conditional ;
 conditional    → logic_or ( "?" expression : conditional )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
@@ -37,3 +37,5 @@ primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | "(" expression ")"
                | IDENTIFIER
+
+assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%="

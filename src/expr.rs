@@ -252,11 +252,11 @@ impl From<TokenKind> for BinOp {
     fn from(kind: TokenKind) -> Self {
         use TokenKind::*;
         match kind {
-            Plus => BinOp::Add,
-            Minus => BinOp::Sub,
-            Star => BinOp::Mul,
-            Slash => BinOp::Div,
-            Percent => BinOp::Rem,
+            Plus | PlusEqual => BinOp::Add,
+            Minus | MinusEqual => BinOp::Sub,
+            Star | StarEqual => BinOp::Mul,
+            Slash | SlashEqual => BinOp::Div,
+            Percent | PercentEqual => BinOp::Rem,
             EqualEqual => BinOp::Equal,
             BangEqual => BinOp::NotEqual,
             Greater => BinOp::Greater,

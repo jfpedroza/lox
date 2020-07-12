@@ -280,11 +280,29 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> ExprParseRes {
         let expr = self.conditional()?;
 
-        if let Some(token) = self.matches(&[Equal]) {
+        if let Some(token) = self.matches(&[
+            Equal,
+            PlusEqual,
+            MinusEqual,
+            StarEqual,
+            SlashEqual,
+            PercentEqual,
+        ]) {
             let value = self.expression()?;
 
             if let ExprKind::Variable(name) = expr.kind {
-                return Ok(Expr::assign(name, value, expr.loc));
+                let assign_value = match token.kind {
+                    Equal => value,
+                    PlusEqual | MinusEqual | StarEqual | SlashEqual | PercentEqual => Expr::binary(
+                        Expr::variable(&name, expr.loc),
+                        token.kind.into(),
+                        value,
+                        token.loc,
+                    ),
+                    _ => unreachable!(),
+                };
+
+                return Ok(Expr::assign(name, assign_value, expr.loc));
             } else {
                 self.errors
                     .push(ParsingError::InvalidAssignmentTarget(token.loc));
