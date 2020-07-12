@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{BinOp, Expr, ExprKind};
 use crate::lexer::{
     Token,
     TokenKind::{self, *},
@@ -289,27 +289,30 @@ impl<'a> Parser<'a> {
             PercentEqual,
         ]) {
             let value = self.expression()?;
-
-            if let ExprKind::Variable(name) = expr.kind {
-                let assign_value = match token.kind {
-                    Equal => value,
-                    PlusEqual | MinusEqual | StarEqual | SlashEqual | PercentEqual => Expr::binary(
-                        Expr::variable(&name, expr.loc),
-                        token.kind.into(),
-                        value,
-                        token.loc,
-                    ),
-                    _ => unreachable!(),
-                };
-
-                return Ok(Expr::assign(name, assign_value, expr.loc));
-            } else {
-                self.errors
-                    .push(ParsingError::InvalidAssignmentTarget(token.loc));
-            }
+            return self.make_assign_expr(expr, token, value);
         }
 
         Ok(expr)
+    }
+
+    fn make_assign_expr(&mut self, expr: Expr, op_token: &Token, value: Expr) -> ExprParseRes {
+        Ok(if let ExprKind::Variable(name) = expr.kind {
+            let assign_value = match op_token.kind {
+                Equal => value,
+                PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
+                | PercentEqual => {
+                    let op = op_token.kind.into();
+                    Expr::binary(Expr::variable(&name, expr.loc), op, value, op_token.loc)
+                }
+                _ => unreachable!(),
+            };
+
+            Expr::assign(name, assign_value, expr.loc)
+        } else {
+            self.errors
+                .push(ParsingError::InvalidAssignmentTarget(expr.loc));
+            value
+        })
     }
 
     fn conditional(&mut self) -> ExprParseRes {
@@ -386,10 +389,38 @@ impl<'a> Parser<'a> {
         if let Some(op_token) = self.matches(&[Bang, Minus]) {
             let op = op_token.kind.into();
             let right = self.unary()?;
-            return Ok(Expr::unary(op, right, op_token.loc));
-        }
+            Ok(Expr::unary(op, right, op_token.loc))
+        } else if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
+            let right = self.unary()?;
+            // ++i generates i = i + 1
+            self.make_assign_expr(right, op_token, Expr::integer(1, op_token.loc))
+        } else {
+            let left = self.primary()?;
 
-        self.primary()
+            if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
+                // i++ generates i = i + 1, i - 1
+                let one = Expr::integer(1, op_token.loc);
+                let left = self.make_assign_expr(left, op_token, one)?;
+                let name = match left.kind {
+                    ExprKind::Assign(ref name, _) => name,
+                    _ => unreachable!(),
+                };
+
+                let op = match op_token.kind {
+                    PlusPlus => BinOp::Sub,
+                    MinusMinus => BinOp::Add,
+                    _ => unreachable!(),
+                };
+
+                let one = Expr::integer(1, op_token.loc);
+                let right = Expr::binary(Expr::variable(name, left.loc), op, one, op_token.loc);
+
+                let left_loc = left.loc;
+                Ok(Expr::comma(left, right, left_loc))
+            } else {
+                Ok(left)
+            }
+        }
     }
 
     fn primary(&mut self) -> ExprParseRes {

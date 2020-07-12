@@ -22,8 +22,10 @@ pub enum TokenKind {
     // One or two character tokens
     Minus,
     MinusEqual,
+    MinusMinus,
     Plus,
     PlusEqual,
+    PlusPlus,
     Slash,
     SlashEqual,
     Star,
@@ -198,11 +200,23 @@ impl<'a> Scanner<'a> {
             ':' => self.create_token(Colon),
             ';' => self.create_token(Semicolon),
             '-' => {
-                let kind = if self.matches('=') { MinusEqual } else { Minus };
+                let kind = if self.matches('=') {
+                    MinusEqual
+                } else if self.matches('-') {
+                    MinusMinus
+                } else {
+                    Minus
+                };
                 self.create_token(kind)
             }
             '+' => {
-                let kind = if self.matches('=') { PlusEqual } else { Plus };
+                let kind = if self.matches('=') {
+                    PlusEqual
+                } else if self.matches('+') {
+                    PlusPlus
+                } else {
+                    Plus
+                };
                 self.create_token(kind)
             }
             '*' => {

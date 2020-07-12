@@ -1,7 +1,7 @@
 use super::{ScanningError::*, TokenKind::*, *};
 use crate::location::Loc;
 
-const LEXEME_KINDS: [(&str, TokenKind); 44] = [
+const LEXEME_KINDS: [(&str, TokenKind); 46] = [
     ("(", LeftParen),
     (")", RightParen),
     ("{", LeftBrace),
@@ -13,8 +13,10 @@ const LEXEME_KINDS: [(&str, TokenKind); 44] = [
     (";", Semicolon),
     ("-", Minus),
     ("-=", MinusEqual),
+    ("--", MinusMinus),
     ("+", Plus),
     ("+=", PlusEqual),
+    ("++", PlusPlus),
     ("*", Star),
     ("*=", StarEqual),
     ("%", Percent),

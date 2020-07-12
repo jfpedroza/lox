@@ -405,11 +405,19 @@ fn test_var_assignment2() {
     i *= -15;
     i /= 3;
     i %= 4;
+    var j = ++i;
+    var k = --i;
+    var l = k--;
+    var m = j++;
     "#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(2.into()), env_get(&inter, "i"));
+    assert_eq!(Ok(4.into()), env_get(&inter, "j"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "k"));
+    assert_eq!(Ok(2.into()), env_get(&inter, "l"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "m"));
 }
 
 #[test]
@@ -514,7 +522,7 @@ fn test_while_stmt() {
 #[test]
 fn test_for_stmt() {
     let input = r#"var i;
-    for (i = 0; i < 10; i += 1) {}"#;
+    for (i = 0; i < 10; ++i) {}"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
@@ -524,13 +532,13 @@ fn test_for_stmt() {
 #[test]
 fn test_for_break_stmt() {
     let input = r#"var i;
-    for (i = 0; ; i += 1) {
-        if (i == 10) break;
+    for (i = 10; ; --i) {
+        if (i == 0) break;
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
-    assert_eq!(Ok(10.into()), env_get(&inter, "i"));
+    assert_eq!(Ok(0.into()), env_get(&inter, "i"));
 }
 
 #[test]
