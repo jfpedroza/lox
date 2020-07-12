@@ -35,8 +35,14 @@ pub enum RuntimeError {
     UndefinedVariable(Loc, String),
 }
 
+#[derive(Debug)]
+pub enum RuntimeInterrupt {
+    Error(RuntimeError),
+    Break,
+}
+
 type ValueRes = Result<Value, RuntimeError>;
-type ExecuteRes = Result<(), RuntimeError>;
+type ExecuteRes = Result<(), RuntimeInterrupt>;
 
 impl Interpreter {
     pub fn new() -> Self {
@@ -45,9 +51,9 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, stmts: &[Stmt]) -> ExecuteRes {
+    pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
         for stmt in stmts {
-            self.execute(stmt)?;
+            self.execute(stmt).map_err(RuntimeInterrupt::expect_error)?
         }
 
         Ok(())
@@ -57,7 +63,7 @@ impl Interpreter {
         expr.accept(self)
     }
 
-    pub fn execute(&mut self, stmt: &Stmt) -> ExecuteRes {
+    fn execute(&mut self, stmt: &Stmt) -> ExecuteRes {
         stmt.accept(self)
     }
 
@@ -206,7 +212,7 @@ impl ExprVisitor<Value> for Interpreter {
 }
 
 impl StmtVisitor<()> for Interpreter {
-    type Error = RuntimeError;
+    type Error = RuntimeInterrupt;
 
     fn visit_expression_stmt(&mut self, expr: &Expr, _loc: Loc) -> ExecuteRes {
         self.evaluate(expr)?;
@@ -236,6 +242,20 @@ impl StmtVisitor<()> for Interpreter {
         Ok(())
     }
 
+    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ExecuteRes {
+        while self.evaluate(cond)?.is_truthy() {
+            match self.execute(body) {
+                Ok(()) => (),
+                Err(RuntimeInterrupt::Break) => break,
+                Err(interrupt) => {
+                    return Err(interrupt);
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, _loc: Loc) -> ExecuteRes {
         let init_val = if let Some(expr) = init {
             self.evaluate(expr)?
@@ -249,6 +269,10 @@ impl StmtVisitor<()> for Interpreter {
 
     fn visit_block_stmt(&mut self, stmts: &[Stmt], _loc: Loc) -> ExecuteRes {
         self.execute_block(stmts, Environ::with_enclosing(&self.env))
+    }
+
+    fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
+        Err(RuntimeInterrupt::Break)
     }
 }
 
@@ -391,5 +415,24 @@ impl RuntimeError {
 
     fn undefined_variable(loc: Loc, name: &str) -> Self {
         Self::UndefinedVariable(loc, String::from(name))
+    }
+}
+
+impl RuntimeInterrupt {
+    fn expect_error(self) -> RuntimeError {
+        use RuntimeInterrupt::*;
+        match self {
+            Error(error) => error,
+            interrupt => panic!(
+                "Expected interrupt to be an error at this point. Got: {:?}",
+                interrupt
+            ),
+        }
+    }
+}
+
+impl From<RuntimeError> for RuntimeInterrupt {
+    fn from(error: RuntimeError) -> Self {
+        Self::Error(error)
     }
 }

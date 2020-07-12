@@ -42,6 +42,7 @@ pub enum TokenKind {
 
     // Keywords
     And,
+    Break,
     Class,
     Else,
     False,
@@ -439,6 +440,7 @@ fn keyword_to_kind(keyword: &str) -> Option<TokenKind> {
     use TokenKind::*;
     Some(match keyword {
         "and" => And,
+        "break" => Break,
         "class" => Class,
         "else" => Else,
         "false" => False,

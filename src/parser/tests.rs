@@ -433,6 +433,77 @@ fn test_print_stmt() {
 }
 
 #[test]
+fn test_while_stmt() {
+    let input = r#"while (i < 10) {
+        print i;
+        break;
+    }"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![while_stmt(
+            less_expr(var_expr("i", (0, 7)), int_expr(10, (0, 11)), (0, 9)),
+            block_stmt(
+                vec![
+                    print_stmt(var_expr("i", (1, 14)), (1, 8)),
+                    break_stmt((2, 8)),
+                ],
+                (0, 15)
+            ),
+            (0, 0)
+        )]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_for_stmt() {
+    let input = r#"for (var i = 0; i < 10; i = i + 1) {
+        print i;
+        break;
+    }"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![for_stmt(
+            Some(var_stmt("i", Some(int_expr(0, (0, 13))), (0, 5))),
+            less_expr(var_expr("i", (0, 16)), int_expr(10, (0, 20)), (0, 18)),
+            Some(assign_expr(
+                "i",
+                add_expr(var_expr("i", (0, 28)), int_expr(1, (0, 32)), (0, 30)),
+                (0, 24)
+            )),
+            block_stmt(
+                vec![
+                    print_stmt(var_expr("i", (1, 14)), (1, 8)),
+                    break_stmt((2, 8)),
+                ],
+                (0, 35)
+            ),
+            (0, 0)
+        )]),
+        parser.parse()
+    );
+}
+
+#[test]
+fn test_empty_for_stmt() {
+    let input = r#"for (;;) {}"#;
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(
+        Ok(vec![for_stmt(
+            None,
+            bool_expr(true, (0, 6)),
+            None,
+            block_stmt(vec![], (0, 9)),
+            (0, 0)
+        )]),
+        parser.parse()
+    );
+}
+
+#[test]
 fn test_var_stmt() {
     let tokens = get_tokens("var pi = 3.1416;");
     let mut parser = Parser::new(&tokens);
@@ -451,6 +522,13 @@ fn test_null_var_stmt() {
     let tokens = get_tokens("var name;");
     let mut parser = Parser::new(&tokens);
     assert_eq!(Ok(vec![var_stmt("name", None, (0, 0))]), parser.parse());
+}
+
+#[test]
+fn test_break_stmt() {
+    let tokens = get_tokens("break;");
+    let mut parser = Parser::new(&tokens);
+    assert_eq!(Ok(vec![break_stmt((0, 0))]), parser.parse());
 }
 
 #[test]

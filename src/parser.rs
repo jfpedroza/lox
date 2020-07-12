@@ -125,8 +125,8 @@ impl<'a> Parser<'a> {
         res.or_else(|err| {
             self.errors.push(err);
             self.synchronize();
-            // Returns a dummy nil;
-            Ok(Stmt::expression(Expr::nil(Loc::new(0, 0)), Loc::new(0, 0)))
+            // Returns a dummy stmt
+            Ok(Stmt::default())
         })
     }
 
@@ -135,8 +135,15 @@ impl<'a> Parser<'a> {
             self.if_statement()
         } else if self.matches(&[Print]).is_some() {
             self.print_statement()
+        } else if self.matches(&[While]).is_some() {
+            self.while_statement()
+        } else if self.matches(&[For]).is_some() {
+            self.for_statement()
         } else if let Some(token) = self.matches(&[LeftBrace]) {
             Ok(Stmt::block(self.block()?, token.loc))
+        } else if let Some(token) = self.matches(&[Break]) {
+            self.consume(Semicolon, |p| p.expected_semicolon_error("'break'"))?;
+            Ok(Stmt::break_stmt(token.loc))
         } else {
             self.expression_statement()
         }
@@ -162,6 +169,63 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         self.consume(Semicolon, |p| p.expected_semicolon_error("value"))?;
         Ok(Stmt::print(expr, *loc))
+    }
+
+    fn while_statement(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        self.consume(LeftParen, |p| p.expected_open_paren_error("while"))?;
+        let cond = self.expression()?;
+        self.consume(RightParen, |p| {
+            p.expected_close_paren_error("while condition")
+        })?;
+
+        let body = self.statement()?;
+
+        Ok(Stmt::while_stmt(cond, body, *loc))
+    }
+
+    fn for_statement(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        self.consume(LeftParen, |p| p.expected_open_paren_error("for"))?;
+
+        let init = if self.matches(&[Semicolon]).is_some() {
+            None
+        } else if self.matches(&[Var]).is_some() {
+            Some(self.var_declaration()?)
+        } else {
+            Some(self.expression_statement()?)
+        };
+
+        let cond = if let Some(token) = self.matches(&[Semicolon]) {
+            Expr::boolean(true, token.loc)
+        } else {
+            let cond = self.expression()?;
+            self.consume(Semicolon, |p| p.expected_semicolon_error("condition"))?;
+            cond
+        };
+
+        let increment = if self.check(RightParen) {
+            None
+        } else {
+            Some(self.expression()?)
+        };
+
+        self.consume(RightParen, |p| p.expected_close_paren_error("for clauses"))?;
+
+        let mut body = self.statement()?;
+
+        if let Some(inc_expr) = increment {
+            let body_loc = body.loc;
+            body = Stmt::block(vec![body, inc_expr.into()], body_loc);
+        }
+
+        let while_stmt = Stmt::while_stmt(cond, body, *loc);
+        Ok(if let Some(init_stmt) = init {
+            let init_loc = init_stmt.loc;
+            Stmt::block(vec![init_stmt, while_stmt], init_loc)
+        } else {
+            while_stmt
+        })
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, ParsingError> {
@@ -200,8 +264,7 @@ impl<'a> Parser<'a> {
             self.consume(Semicolon, |p| p.expected_semicolon_error("expression"))?;
         }
 
-        let loc = expr.loc;
-        Ok(Stmt::expression(expr, loc))
+        Ok(Stmt::from(expr))
     }
 
     pub fn expression(&mut self) -> ExprParseRes {

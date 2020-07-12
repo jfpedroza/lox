@@ -44,3 +44,12 @@ impl<T: PartialEq + Debug> Debug for Located<T> {
         write!(f, "{:?}[{}]", self.kind, self.loc)
     }
 }
+
+impl<T: PartialEq + Default> Default for Located<T> {
+    fn default() -> Self {
+        Self {
+            kind: Default::default(),
+            loc: Default::default(),
+        }
+    }
+}
