@@ -74,7 +74,7 @@ impl Lox {
         let mut rl = Editor::<()>::new();
         rl.set_auto_add_history(true);
 
-        println!("Lox 0.0.2");
+        println!("Lox 0.0.3");
         println!("Press Ctrl+D to exit\n");
 
         let prompt = format!("{}> ", Blue.bold().paint("lox"));
