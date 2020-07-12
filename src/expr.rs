@@ -65,6 +65,10 @@ impl Expr {
         Expr::new(kind, loc)
     }
 
+    pub fn integer(int: i64, loc: Loc) -> Self {
+        Expr::new(ExprKind::Literal(LitExpr::Integer(int)), loc)
+    }
+
     pub fn boolean(boolean: bool, loc: Loc) -> Self {
         Expr::new(ExprKind::Literal(LitExpr::Boolean(boolean)), loc)
     }
@@ -252,11 +256,11 @@ impl From<TokenKind> for BinOp {
     fn from(kind: TokenKind) -> Self {
         use TokenKind::*;
         match kind {
-            Plus => BinOp::Add,
-            Minus => BinOp::Sub,
-            Star => BinOp::Mul,
-            Slash => BinOp::Div,
-            Percent => BinOp::Rem,
+            Plus | PlusEqual | PlusPlus => BinOp::Add,
+            Minus | MinusEqual | MinusMinus => BinOp::Sub,
+            Star | StarEqual => BinOp::Mul,
+            Slash | SlashEqual => BinOp::Div,
+            Percent | PercentEqual => BinOp::Rem,
             EqualEqual => BinOp::Equal,
             BangEqual => BinOp::NotEqual,
             Greater => BinOp::Greater,

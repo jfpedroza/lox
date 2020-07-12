@@ -1,7 +1,7 @@
 use super::{ScanningError::*, TokenKind::*, *};
 use crate::location::Loc;
 
-const LEXEME_KINDS: [(&str, TokenKind); 39] = [
+const LEXEME_KINDS: [(&str, TokenKind); 46] = [
     ("(", LeftParen),
     (")", RightParen),
     ("{", LeftBrace),
@@ -10,12 +10,19 @@ const LEXEME_KINDS: [(&str, TokenKind); 39] = [
     (".", Dot),
     ("?", Question),
     (":", Colon),
-    ("-", Minus),
-    ("+", Plus),
     (";", Semicolon),
+    ("-", Minus),
+    ("-=", MinusEqual),
+    ("--", MinusMinus),
+    ("+", Plus),
+    ("+=", PlusEqual),
+    ("++", PlusPlus),
     ("*", Star),
+    ("*=", StarEqual),
     ("%", Percent),
+    ("%=", PercentEqual),
     ("/", Slash),
+    ("/=", SlashEqual),
     ("!", Bang),
     ("!=", BangEqual),
     ("=", Equal),
@@ -130,7 +137,7 @@ fn test_block_comment() {
 
 #[test]
 fn test_multiple_tokens() {
-    let tokens = get_tokens("(){},.-+;*!=!%===<=</>>=?://this should be ignored");
+    let tokens = get_tokens("(){},.-+;*!=!%:==<=</>>=?=//this should be ignored");
     let expected_tokens = vec![
         non_literal_token(LeftParen, "(", 0, 0),
         non_literal_token(RightParen, ")", 0, 1),
@@ -145,15 +152,15 @@ fn test_multiple_tokens() {
         non_literal_token(BangEqual, "!=", 0, 10),
         non_literal_token(Bang, "!", 0, 12),
         non_literal_token(Percent, "%", 0, 13),
-        non_literal_token(EqualEqual, "==", 0, 14),
-        non_literal_token(Equal, "=", 0, 16),
+        non_literal_token(Colon, ":", 0, 14),
+        non_literal_token(EqualEqual, "==", 0, 15),
         non_literal_token(LessEqual, "<=", 0, 17),
         non_literal_token(Less, "<", 0, 19),
         non_literal_token(Slash, "/", 0, 20),
         non_literal_token(Greater, ">", 0, 21),
         non_literal_token(GreaterEqual, ">=", 0, 22),
         non_literal_token(Question, "?", 0, 24),
-        non_literal_token(Colon, ":", 0, 25),
+        non_literal_token(Equal, "=", 0, 25),
         Token::eof(Loc::new(0, 50)),
     ];
     assert_eq!(Ok(expected_tokens), tokens);
