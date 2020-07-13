@@ -27,6 +27,7 @@ pub enum ParsingError {
     ExpectedSemicolon(Loc, String, String),
     ExpectedVarName(Loc, String),
     InvalidAssignmentTarget(Loc),
+    MaximumArgumentsExceeded(Loc),
     Multiple(Vec<ParsingError>),
 }
 
@@ -395,32 +396,62 @@ impl<'a> Parser<'a> {
             // ++i generates i = i + 1
             self.make_assign_expr(right, op_token, Expr::integer(1, op_token.loc))
         } else {
-            let left = self.primary()?;
+            self.postfix()
+        }
+    }
 
-            if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
-                // i++ generates i = i + 1, i - 1
-                let one = Expr::integer(1, op_token.loc);
-                let left = self.make_assign_expr(left, op_token, one)?;
-                let name = match left.kind {
-                    ExprKind::Assign(ref name, _) => name,
-                    _ => unreachable!(),
-                };
+    fn postfix(&mut self) -> ExprParseRes {
+        let left = self.primary()?;
 
-                let op = match op_token.kind {
-                    PlusPlus => BinOp::Sub,
-                    MinusMinus => BinOp::Add,
-                    _ => unreachable!(),
-                };
+        if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
+            // i++ generates i = i + 1, i - 1
+            let one = Expr::integer(1, op_token.loc);
+            let left = self.make_assign_expr(left, op_token, one)?;
+            let name = match left.kind {
+                ExprKind::Assign(ref name, _) => name,
+                _ => unreachable!(),
+            };
 
-                let one = Expr::integer(1, op_token.loc);
-                let right = Expr::binary(Expr::variable(name, left.loc), op, one, op_token.loc);
+            let op = match op_token.kind {
+                PlusPlus => BinOp::Sub,
+                MinusMinus => BinOp::Add,
+                _ => unreachable!(),
+            };
 
-                let left_loc = left.loc;
-                Ok(Expr::comma(left, right, left_loc))
-            } else {
-                Ok(left)
+            let one = Expr::integer(1, op_token.loc);
+            let right = Expr::binary(Expr::variable(name, left.loc), op, one, op_token.loc);
+
+            let left_loc = left.loc;
+            Ok(Expr::comma(left, right, left_loc))
+        } else {
+            let mut expr = left;
+            while self.matches(&[LeftParen]).is_some() {
+                expr = self.finish_call(expr)?;
+            }
+
+            Ok(expr)
+        }
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ExprParseRes {
+        let mut args = Vec::new();
+
+        if !self.check(RightParen) {
+            args.push(self.assignment()?);
+            while self.matches(&[Comma]).is_some() {
+                args.push(self.assignment()?);
+            }
+
+            if args.len() > 255 {
+                let loc = args[256].loc;
+                self.errors
+                    .push(ParsingError::MaximumArgumentsExceeded(loc));
             }
         }
+
+        let token = self.consume(RightParen, |p| p.expected_close_paren_error("arguments"))?;
+
+        Ok(Expr::call(callee, args, token.loc))
     }
 
     fn primary(&mut self) -> ExprParseRes {

@@ -13,6 +13,7 @@ pub enum ExprKind {
     Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
     Variable(String),
     Assign(String, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 pub type Expr = Located<ExprKind>;
@@ -51,6 +52,8 @@ pub trait Visitor<Res> {
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> Self::Result;
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> Self::Result;
 }
 
 impl Expr {
@@ -112,6 +115,10 @@ impl Expr {
         Expr::new(ExprKind::Assign(name, Box::new(expr)), loc)
     }
 
+    pub fn call(callee: Expr, args: Vec<Expr>, loc: Loc) -> Self {
+        Expr::new(ExprKind::Call(Box::new(callee), args), loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -127,6 +134,7 @@ impl Expr {
             Conditional(cond, left, right) => visitor.visit_cond_expr(cond, left, right, self.loc),
             Variable(name) => visitor.visit_variable_expr(name, self.loc),
             Assign(name, expr) => visitor.visit_assign_expr(name, expr, self.loc),
+            Call(callee, args) => visitor.visit_call_expr(callee, args, self.loc),
         }
     }
 }
@@ -150,6 +158,7 @@ impl Debug for ExprKind {
             Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
             Variable(name) => format!("(var {})", name),
             Assign(name, expr) => format!("(= {} {:?})", name, expr),
+            Call(callee, args) => format!("(call {:?} {:?})", callee, args),
         };
 
         write!(f, "{}", string)

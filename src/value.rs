@@ -1,3 +1,4 @@
+use crate::callable::Callable;
 use crate::expr::LitExpr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -8,6 +9,7 @@ pub enum Value {
     Str(String),
     Boolean(bool),
     Nil,
+    Callable(Callable),
 }
 
 pub mod types {
@@ -43,6 +45,7 @@ impl Value {
             Str(_) => types::STRING,
             Boolean(_) => types::BOOL,
             Nil => types::NIL,
+            Callable(callable) => callable.get_type(),
         }
     }
 }
@@ -69,6 +72,12 @@ impl From<i64> for Value {
 impl From<f64> for Value {
     fn from(input: f64) -> Self {
         Value::Float(input)
+    }
+}
+
+impl From<String> for Value {
+    fn from(input: String) -> Self {
+        Value::Str(input)
     }
 }
 
@@ -102,6 +111,7 @@ impl Display for Value {
             Str(string) => write!(f, "{}", string),
             Boolean(boolean) => write!(f, "{}", boolean),
             Nil => write!(f, "nil"),
+            Callable(callable) => callable.fmt(f),
         }
     }
 }

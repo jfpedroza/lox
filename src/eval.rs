@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::callable::{populate_natives, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
@@ -11,9 +12,10 @@ use std::rc::Rc;
 
 pub struct Interpreter {
     env: Env,
+    pub globals: Env,
 }
 
-struct Environ {
+pub struct Environ {
     values: HashMap<String, Value>,
     enclosing: Option<Env>,
 }
@@ -33,6 +35,10 @@ pub enum RuntimeError {
     DivisionByZero(Loc),
     #[fail(display = "[{}] Undefined variable '{}'", _0, _1)]
     UndefinedVariable(Loc, String),
+    #[fail(display = "[{}] '{}' is not callable", _0, _1)]
+    NotACallable(Loc, String),
+    #[fail(display = "[{}] Expected {} arguments but got {}", _0, _1, _2)]
+    MismatchingArity(Loc, usize, usize),
 }
 
 #[derive(Debug)]
@@ -41,14 +47,19 @@ pub enum RuntimeInterrupt {
     Break,
 }
 
-type ValueRes = Result<Value, RuntimeError>;
+pub type ValueRes = Result<Value, RuntimeError>;
 type ExecuteRes = Result<(), RuntimeInterrupt>;
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter {
-            env: Environ::new().into(),
-        }
+        let globals = Environ::new().into();
+        let mut inter = Interpreter {
+            env: Rc::clone(&globals),
+            globals: globals,
+        };
+
+        populate_natives(&mut inter);
+        inter
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -208,6 +219,28 @@ impl ExprVisitor<Value> for Interpreter {
         let cloned_val = val.clone();
         self.env.borrow_mut().assign(name, val, loc)?;
         Ok(cloned_val)
+    }
+
+    fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> ValueRes {
+        let callee = self.evaluate(callee)?;
+        let args: Vec<_> = args
+            .iter()
+            .map(|a| self.evaluate(a))
+            .collect::<Result<_, _>>()?;
+
+        if let Value::Callable(callable) = callee {
+            if args.len() == callable.arity() {
+                callable.call(self, args)
+            } else {
+                Err(RuntimeError::mismatching_arity(
+                    loc,
+                    callable.arity(),
+                    args.len(),
+                ))
+            }
+        } else {
+            Err(RuntimeError::not_a_callable(loc, callee))
+        }
     }
 }
 
@@ -415,6 +448,14 @@ impl RuntimeError {
 
     fn undefined_variable(loc: Loc, name: &str) -> Self {
         Self::UndefinedVariable(loc, String::from(name))
+    }
+
+    fn not_a_callable(loc: Loc, callee: Value) -> Self {
+        Self::NotACallable(loc, String::from(callee.get_type()))
+    }
+
+    fn mismatching_arity(loc: Loc, expected: usize, got: usize) -> Self {
+        Self::MismatchingArity(loc, expected, got)
     }
 }
 

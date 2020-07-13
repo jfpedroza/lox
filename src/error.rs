@@ -79,6 +79,9 @@ impl Display for ParsingError {
             }
             ExpectedVarName(loc, got) => write!(f, "[{}] Expected variable name. Got {}", loc, got),
             InvalidAssignmentTarget(loc) => write!(f, "[{}] Invalid assignment target", loc),
+            MaximumArgumentsExceeded(loc) => {
+                write!(f, "[{}] Cannot have more than 255 arguments", loc)
+            }
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();

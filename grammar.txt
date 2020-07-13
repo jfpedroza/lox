@@ -31,11 +31,14 @@ equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
 multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
+unary          → ( "!" | "-" | "++" | "--" ) unary
+               | postfix ;
+postfix        → primary ( "++" | "--" )
+               | primary ( "(" arguments? ")" )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | "(" expression ")"
-               | IDENTIFIER
+               | IDENTIFIER ;
 
-assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%="
+assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+arguments      → assignment ( "," assignment )* ;
