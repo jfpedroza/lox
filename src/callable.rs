@@ -8,10 +8,10 @@ pub enum Callable {
     Native(NativeFunction),
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct NativeFunction {
-    arity: usize,
-    name: &'static str,
+#[derive(PartialEq, Copy, Clone, Debug)]
+pub enum NativeFunction {
+    Clock,
+    Str,
 }
 
 pub mod types {
@@ -45,7 +45,7 @@ impl LoxCallable for Callable {
     fn arity(&self) -> usize {
         use Callable::*;
         match self {
-            Native(function) => function.arity,
+            Native(function) => function.arity(),
         }
     }
 
@@ -64,21 +64,29 @@ impl From<NativeFunction> for Callable {
 }
 
 impl NativeFunction {
-    fn new(arity: usize, name: &'static str) -> Self {
-        Self { arity, name }
+    fn name(&self) -> &'static str {
+        use NativeFunction::*;
+        match self {
+            Clock => "clock",
+            Str => "str",
+        }
     }
 }
 
 impl LoxCallable for NativeFunction {
     fn arity(&self) -> usize {
-        self.arity
+        use NativeFunction::*;
+        match self {
+            Clock => 0,
+            Str => 1,
+        }
     }
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
-        match self.name {
-            "clock" => clock(inter, args),
-            "str" => val_to_str(inter, args),
-            name => panic!("Call to unknown native function '{}'", name),
+        use NativeFunction::*;
+        match self {
+            Clock => clock(inter, args),
+            Str => val_to_str(inter, args),
         }
     }
 }
@@ -91,15 +99,12 @@ impl Display for NativeFunction {
 
 pub fn populate_natives(inter: &mut Interpreter) {
     let mut globals = inter.globals.borrow_mut();
-    define_native(&mut globals, 0, "clock");
-    define_native(&mut globals, 1, "str");
+    define_native(&mut globals, NativeFunction::Clock);
+    define_native(&mut globals, NativeFunction::Str);
 }
 
-fn define_native(globals: &mut Environ, arity: usize, name: &'static str) {
-    globals.define(
-        name,
-        Value::Callable(NativeFunction::new(arity, name).into()),
-    );
+fn define_native(globals: &mut Environ, function: NativeFunction) {
+    globals.define(function.name(), Value::Callable(function.into()));
 }
 
 fn clock(_inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
