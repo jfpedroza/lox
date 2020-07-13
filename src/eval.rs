@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_natives, LoxCallable};
+use crate::callable::{populate_natives, Function, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
@@ -55,7 +55,7 @@ impl Interpreter {
         let globals = Environ::new().into();
         let mut inter = Interpreter {
             env: Rc::clone(&globals),
-            globals: globals,
+            globals,
         };
 
         populate_natives(&mut inter);
@@ -78,7 +78,7 @@ impl Interpreter {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
+    pub fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
         let prev = Rc::clone(&self.env);
         self.env = env;
 
@@ -304,6 +304,18 @@ impl StmtVisitor<()> for Interpreter {
         self.execute_block(stmts, Environ::with_enclosing(&self.env))
     }
 
+    fn visit_function_stmt(
+        &mut self,
+        name: &str,
+        params: &[String],
+        body: &[Stmt],
+        _loc: Loc,
+    ) -> ExecuteRes {
+        let function = Function::new(name, params, body);
+        self.env.borrow_mut().define(name, function.into());
+        Ok(())
+    }
+
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
         Err(RuntimeInterrupt::Break)
     }
@@ -460,7 +472,7 @@ impl RuntimeError {
 }
 
 impl RuntimeInterrupt {
-    fn expect_error(self) -> RuntimeError {
+    pub fn expect_error(self) -> RuntimeError {
         use RuntimeInterrupt::*;
         match self {
             Error(error) => error,

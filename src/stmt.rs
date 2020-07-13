@@ -1,7 +1,7 @@
 use crate::expr::Expr;
 use crate::location::{Loc, Located};
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum StmtKind {
     Expression(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -9,6 +9,7 @@ pub enum StmtKind {
     While(Expr, Box<Stmt>),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
+    Function(String, Vec<String>, Vec<Stmt>),
     Break,
 }
 
@@ -35,6 +36,14 @@ pub trait Visitor<Res> {
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> Self::Result;
 
     fn visit_block_stmt(&mut self, stmts: &[Stmt], loc: Loc) -> Self::Result;
+
+    fn visit_function_stmt(
+        &mut self,
+        name: &str,
+        params: &[String],
+        body: &[Stmt],
+        loc: Loc,
+    ) -> Self::Result;
 
     fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
 }
@@ -67,6 +76,10 @@ impl Stmt {
         Stmt::new(StmtKind::Block(stmts), loc)
     }
 
+    pub fn function(name: &str, params: Vec<String>, body: Vec<Stmt>, loc: Loc) -> Self {
+        Stmt::new(StmtKind::Function(String::from(name), params, body), loc)
+    }
+
     pub fn break_stmt(loc: Loc) -> Self {
         Stmt::new(StmtKind::Break, loc)
     }
@@ -85,6 +98,9 @@ impl Stmt {
             While(expr, body) => visitor.visit_while_stmt(expr, body, self.loc),
             Var(name, init) => visitor.visit_var_stmt(name, init, self.loc),
             Block(stmts) => visitor.visit_block_stmt(stmts, self.loc),
+            Function(name, params, body) => {
+                visitor.visit_function_stmt(name, params, body, self.loc)
+            }
             Break => visitor.visit_break_stmt(self.loc),
         }
     }

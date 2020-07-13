@@ -1,4 +1,4 @@
-use crate::callable::Callable;
+use crate::callable::{Callable, LoxCallable};
 use crate::expr::LitExpr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
@@ -90,6 +90,12 @@ impl From<&str> for Value {
 impl From<bool> for Value {
     fn from(input: bool) -> Self {
         Value::Boolean(input)
+    }
+}
+
+impl<T: LoxCallable> From<T> for Value {
+    fn from(input: T) -> Self {
+        Value::Callable(input.into())
     }
 }
 

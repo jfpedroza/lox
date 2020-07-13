@@ -22,12 +22,13 @@ pub enum ParsingError {
     ExpectedExpression(Loc, String),
     ExpectedOpenParen(Loc, String, String),
     ExpectedCloseParen(Loc, String, String),
+    ExpectedOpenBrace(Loc, String, String),
     ExpectedCloseBrace(Loc, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
-    ExpectedVarName(Loc, String),
+    ExpectedName(Loc, String, String),
     InvalidAssignmentTarget(Loc),
-    MaximumArgumentsExceeded(Loc),
+    MaximumArgumentsExceeded(Loc, String),
     Multiple(Vec<ParsingError>),
 }
 
@@ -119,6 +120,8 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> StmtParseRes {
         let res = if self.matches(&[Var]).is_some() {
             self.var_declaration()
+        } else if self.matches(&[Fun]).is_some() {
+            self.function("function")
         } else {
             self.statement()
         };
@@ -152,7 +155,7 @@ impl<'a> Parser<'a> {
 
     fn if_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("if"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'if'"))?;
         let cond = self.expression()?;
         self.consume(RightParen, |p| p.expected_close_paren_error("if condition"))?;
 
@@ -174,7 +177,7 @@ impl<'a> Parser<'a> {
 
     fn while_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("while"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'while'"))?;
         let cond = self.expression()?;
         self.consume(RightParen, |p| {
             p.expected_close_paren_error("while condition")
@@ -187,7 +190,7 @@ impl<'a> Parser<'a> {
 
     fn for_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("for"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'for'"))?;
 
         let init = if self.matches(&[Semicolon]).is_some() {
             None
@@ -243,7 +246,7 @@ impl<'a> Parser<'a> {
 
     fn var_declaration(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        let name = self.consume(Identifier, Self::expected_var_name_error)?;
+        let name = self.consume(Identifier, |p| p.expected_name_error("variable"))?;
         let init = if self.matches(&[Equal]).is_some() {
             Some(self.expression()?)
         } else {
@@ -255,6 +258,40 @@ impl<'a> Parser<'a> {
         })?;
 
         Ok(Stmt::var(name.lexeme, init, *loc))
+    }
+
+    fn function(&mut self, kind: &str) -> StmtParseRes {
+        let name = self.consume(Identifier, |p| p.expected_name_error(kind))?;
+        self.consume(LeftParen, |p| {
+            p.expected_open_paren_error(&format!("{} name", kind))
+        })?;
+
+        let mut params = Vec::new();
+        if !self.check(RightParen) {
+            params.push(self.consume(Identifier, |p| p.expected_name_error("parameter"))?);
+            while self.matches(&[Comma]).is_some() {
+                params.push(self.consume(Identifier, |p| p.expected_name_error("parameter"))?);
+            }
+
+            if params.len() > 255 {
+                let loc = params[256].loc;
+                self.errors
+                    .push(ParsingError::max_args_exceeded(loc, "parameters"));
+            }
+        }
+
+        self.consume(RightParen, |p| p.expected_close_paren_error("parameters"))?;
+
+        self.consume(LeftBrace, |p| {
+            p.expected_open_brace_error(&format!("{} body", kind))
+        })?;
+        let body = self.block()?;
+
+        let params = params
+            .iter()
+            .map(|param| String::from(param.lexeme))
+            .collect();
+        Ok(Stmt::function(name.lexeme, params, body, name.loc))
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {
@@ -445,7 +482,7 @@ impl<'a> Parser<'a> {
             if args.len() > 255 {
                 let loc = args[256].loc;
                 self.errors
-                    .push(ParsingError::MaximumArgumentsExceeded(loc));
+                    .push(ParsingError::max_args_exceeded(loc, "arguments"));
             }
         }
 
@@ -504,6 +541,11 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedCloseParen(token.loc, String::from(after), token.lexeme.to_string())
     }
 
+    fn expected_open_brace_error(&self, before: &str) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedOpenBrace(token.loc, String::from(before), token.lexeme.to_string())
+    }
+
     fn expected_close_brace_error(&self) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedCloseBrace(token.loc, token.lexeme.to_string())
@@ -524,8 +566,14 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedSemicolon(token.loc, String::from(after), token.lexeme.to_string())
     }
 
-    fn expected_var_name_error(&self) -> ParsingError {
+    fn expected_name_error(&self, kind: &str) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedVarName(token.loc, token.lexeme.to_string())
+        ParsingError::ExpectedName(token.loc, String::from(kind), token.lexeme.to_string())
+    }
+}
+
+impl ParsingError {
+    fn max_args_exceeded(loc: Loc, kind: &str) -> Self {
+        ParsingError::MaximumArgumentsExceeded(loc, String::from(kind))
     }
 }

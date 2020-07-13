@@ -2,7 +2,7 @@ use crate::lexer::{Literal, TokenKind};
 use crate::location::{Loc, Located};
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum ExprKind {
     Literal(LitExpr),
     Unary(UnOp, Box<Expr>),
@@ -177,7 +177,7 @@ fn parenthesize(name: &str, exprs: &[&Expr]) -> String {
     parts.join("")
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum LitExpr {
     Integer(i64),
     Float(f64),
@@ -199,7 +199,7 @@ impl Display for LitExpr {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum UnOp {
     Negate,
     Not,
@@ -227,7 +227,7 @@ impl From<TokenKind> for UnOp {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum BinOp {
     Add,
     Sub,
@@ -281,7 +281,7 @@ impl From<TokenKind> for BinOp {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum LogOp {
     And,
     Or,

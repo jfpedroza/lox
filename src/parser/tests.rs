@@ -609,7 +609,7 @@ fn test_missing_open_paren_if() {
     assert_eq!(
         Err(ParsingError::ExpectedOpenParen(
             Loc::new(0, 3),
-            String::from("if"),
+            String::from("'if'"),
             String::from("true")
         )),
         parser.parse()
@@ -662,8 +662,9 @@ fn test_missing_var_name() {
     let tokens = get_tokens("var 3");
     let mut parser = Parser::new(&tokens);
     assert_eq!(
-        Err(ParsingError::ExpectedVarName(
+        Err(ParsingError::ExpectedName(
             Loc::new(0, 4),
+            String::from("variable"),
             String::from("3")
         )),
         parser.parse()
