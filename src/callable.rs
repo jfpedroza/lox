@@ -122,6 +122,15 @@ impl Function {
             closure: Rc::clone(closure),
         }
     }
+
+    pub fn new_anon(params: &[String], body: &[Stmt], closure: &Env) -> Self {
+        Self {
+            name: Rc::new(None),
+            params: Rc::new(params.to_vec()),
+            body: Rc::new(body.to_vec()),
+            closure: Rc::clone(closure),
+        }
+    }
 }
 
 impl LoxCallable for Function {

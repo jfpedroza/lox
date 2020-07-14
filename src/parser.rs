@@ -277,9 +277,18 @@ impl<'a> Parser<'a> {
 
     fn function(&mut self, kind: &str) -> StmtParseRes {
         let name = self.consume(Identifier, |p| p.expected_name_error(kind))?;
-        self.consume(LeftParen, |p| {
-            p.expected_open_paren_error(&format!("{} name", kind))
+        let params = self.function_params(&format!("{} name", kind))?;
+
+        self.consume(LeftBrace, |p| {
+            p.expected_open_brace_error(&format!("{} body", kind))
         })?;
+        let body = self.block()?;
+
+        Ok(Stmt::function(name.lexeme, params, body, name.loc))
+    }
+
+    fn function_params(&mut self, open_paren_after: &str) -> Result<Vec<String>, ParsingError> {
+        self.consume(LeftParen, |p| p.expected_open_paren_error(open_paren_after))?;
 
         let mut params = Vec::new();
         if !self.check(RightParen) {
@@ -297,16 +306,11 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, |p| p.expected_close_paren_error("parameters"))?;
 
-        self.consume(LeftBrace, |p| {
-            p.expected_open_brace_error(&format!("{} body", kind))
-        })?;
-        let body = self.block()?;
-
         let params = params
             .iter()
             .map(|param| String::from(param.lexeme))
             .collect();
-        Ok(Stmt::function(name.lexeme, params, body, name.loc))
+        Ok(params)
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {
@@ -507,7 +511,9 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> ExprParseRes {
-        let primary_tokens = [False, True, Nil, Integer, Float, Str, LeftParen, Identifier];
+        let primary_tokens = [
+            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, Fun,
+        ];
         let token = self
             .matches(&primary_tokens)
             .ok_or_else(|| self.expected_expression_error())?;
@@ -526,8 +532,22 @@ impl<'a> Parser<'a> {
                 Expr::grouping(expr, token.loc)
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
+            Fun => self.anon_function()?,
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
         })
+    }
+
+    fn anon_function(&mut self) -> ExprParseRes {
+        let Token { loc, .. } = self.previous();
+
+        let params = self.function_params("'fun'")?;
+
+        self.consume(LeftBrace, |p| {
+            p.expected_open_brace_error("anonymous function body")
+        })?;
+        let body = self.block()?;
+
+        Ok(Expr::function(params, body, *loc))
     }
 
     fn synchronize(&mut self) {

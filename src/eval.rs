@@ -156,6 +156,11 @@ impl ExprVisitor<Value> for Interpreter {
         Ok(literal.into())
     }
 
+    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], _loc: Loc) -> ValueRes {
+        let function = Function::new_anon(params, body, &self.env);
+        Ok(function.into())
+    }
+
     fn visit_grouping_expr(&mut self, expr: &Expr, _loc: Loc) -> ValueRes {
         self.evaluate(expr)
     }

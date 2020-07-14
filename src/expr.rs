@@ -1,10 +1,12 @@
 use crate::lexer::{Literal, TokenKind};
 use crate::location::{Loc, Located};
+use crate::stmt::Stmt;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
 #[derive(PartialEq, Clone)]
 pub enum ExprKind {
     Literal(LitExpr),
+    Function(Vec<String>, Vec<Stmt>),
     Unary(UnOp, Box<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
     Logical(Box<Expr>, LogOp, Box<Expr>),
@@ -23,6 +25,8 @@ pub trait Visitor<Res> {
     type Result = std::result::Result<Res, Self::Error>;
 
     fn visit_literal_expr(&mut self, literal: &LitExpr, loc: Loc) -> Self::Result;
+
+    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], loc: Loc) -> Self::Result;
 
     fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> Self::Result;
 
@@ -80,6 +84,10 @@ impl Expr {
         Expr::new(ExprKind::Literal(LitExpr::Nil), loc)
     }
 
+    pub fn function(params: Vec<String>, body: Vec<Stmt>, loc: Loc) -> Self {
+        Expr::new(ExprKind::Function(params, body), loc)
+    }
+
     pub fn unary(op: UnOp, right: Expr, loc: Loc) -> Self {
         Expr::new(ExprKind::Unary(op, Box::new(right)), loc)
     }
@@ -126,6 +134,7 @@ impl Expr {
         use ExprKind::*;
         match &self.kind {
             Literal(literal) => visitor.visit_literal_expr(literal, self.loc),
+            Function(params, body) => visitor.visit_function_expr(params, body, self.loc),
             Unary(op, expr) => visitor.visit_unary_expr(op, expr, self.loc),
             Binary(left, op, right) => visitor.visit_binary_expr(left, op, right, self.loc),
             Logical(left, op, right) => visitor.visit_logical_expr(left, op, right, self.loc),
@@ -150,6 +159,7 @@ impl Debug for ExprKind {
         use ExprKind::*;
         let string = match &self {
             Literal(literal) => literal.to_string(),
+            Function(params, body) => format!("(fun {:?} {:?})", params, body),
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
             Logical(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),

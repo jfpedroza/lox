@@ -44,8 +44,11 @@ postfix        → primary ( "++" | "--" )
                | primary ( "(" arguments? ")" )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
+               | IDENTIFIER
+               | anonymous_fun
                | "(" expression ")"
-               | IDENTIFIER ;
+
+anonymous_fun  → "fun" "(" parameters? ")" block ;
 
 assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
 arguments      → assignment ( "," assignment )* ;
