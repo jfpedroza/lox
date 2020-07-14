@@ -143,6 +143,8 @@ impl<'a> Parser<'a> {
             self.while_statement()
         } else if self.matches(&[For]).is_some() {
             self.for_statement()
+        } else if self.matches(&[Return]).is_some() {
+            self.return_statement()
         } else if let Some(token) = self.matches(&[LeftBrace]) {
             Ok(Stmt::block(self.block()?, token.loc))
         } else if let Some(token) = self.matches(&[Break]) {
@@ -242,6 +244,19 @@ impl<'a> Parser<'a> {
         self.consume(RightBrace, Self::expected_close_brace_error)?;
 
         Ok(stmts)
+    }
+
+    fn return_statement(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        let ret = if !self.check(Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Semicolon, |p| p.expected_semicolon_error("return value"))?;
+
+        Ok(Stmt::return_stmt(ret, *loc))
     }
 
     fn var_declaration(&mut self) -> StmtParseRes {

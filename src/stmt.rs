@@ -10,6 +10,7 @@ pub enum StmtKind {
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
     Function(String, Vec<String>, Vec<Stmt>),
+    Return(Option<Expr>),
     Break,
 }
 
@@ -44,6 +45,8 @@ pub trait Visitor<Res> {
         body: &[Stmt],
         loc: Loc,
     ) -> Self::Result;
+
+    fn visit_return_stmt(&mut self, ret: &Option<Expr>, loc: Loc) -> Self::Result;
 
     fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
 }
@@ -80,6 +83,10 @@ impl Stmt {
         Stmt::new(StmtKind::Function(String::from(name), params, body), loc)
     }
 
+    pub fn return_stmt(ret: Option<Expr>, loc: Loc) -> Self {
+        Stmt::new(StmtKind::Return(ret), loc)
+    }
+
     pub fn break_stmt(loc: Loc) -> Self {
         Stmt::new(StmtKind::Break, loc)
     }
@@ -101,6 +108,7 @@ impl Stmt {
             Function(name, params, body) => {
                 visitor.visit_function_stmt(name, params, body, self.loc)
             }
+            Return(ret) => visitor.visit_return_stmt(ret, self.loc),
             Break => visitor.visit_break_stmt(self.loc),
         }
     }

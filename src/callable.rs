@@ -133,10 +133,11 @@ impl LoxCallable for Function {
             env.borrow_mut().define(&self.params[i], arg);
         }
 
-        inter
-            .execute_block(&self.body, env)
-            .map_err(RuntimeInterrupt::expect_error)?;
-        Ok(Value::Nil)
+        match inter.execute_block(&self.body, env) {
+            Ok(()) => Ok(Value::Nil),
+            Err(RuntimeInterrupt::Return(ret)) => Ok(ret),
+            Err(error) => Err(error.expect_error()),
+        }
     }
 }
 

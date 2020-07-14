@@ -44,6 +44,7 @@ pub enum RuntimeError {
 #[derive(Debug)]
 pub enum RuntimeInterrupt {
     Error(RuntimeError),
+    Return(Value),
     Break,
 }
 
@@ -314,6 +315,16 @@ impl StmtVisitor<()> for Interpreter {
         let function = Function::new(name, params, body);
         self.env.borrow_mut().define(name, function.into());
         Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, ret: &Option<Expr>, _loc: Loc) -> ExecuteRes {
+        let ret_val = if let Some(expr) = ret {
+            self.evaluate(expr)?
+        } else {
+            Value::Nil
+        };
+
+        Err(RuntimeInterrupt::Return(ret_val))
     }
 
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
