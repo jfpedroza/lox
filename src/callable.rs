@@ -1,4 +1,4 @@
-use crate::eval::{Environ, Interpreter, RuntimeInterrupt, ValueRes};
+use crate::eval::{Env, Environ, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::stmt::Stmt;
 use crate::value::Value;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -22,6 +22,7 @@ pub struct Function {
     name: Rc<Option<String>>,
     params: Rc<Vec<String>>,
     body: Rc<Vec<Stmt>>,
+    closure: Env,
 }
 
 pub mod types {
@@ -113,11 +114,12 @@ impl From<NativeFunction> for Callable {
 }
 
 impl Function {
-    pub fn new(name: &str, params: &[String], body: &[Stmt]) -> Self {
+    pub fn new(name: &str, params: &[String], body: &[Stmt], closure: &Env) -> Self {
         Self {
             name: Rc::new(Some(String::from(name))),
             params: Rc::new(params.to_vec()),
             body: Rc::new(body.to_vec()),
+            closure: Rc::clone(closure),
         }
     }
 }
@@ -128,7 +130,7 @@ impl LoxCallable for Function {
     }
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
-        let env = Environ::with_enclosing(&inter.globals);
+        let env = Environ::with_enclosing(&self.closure);
         for (i, arg) in args.into_iter().enumerate() {
             env.borrow_mut().define(&self.params[i], arg);
         }

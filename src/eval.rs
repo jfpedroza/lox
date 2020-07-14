@@ -15,12 +15,13 @@ pub struct Interpreter {
     pub globals: Env,
 }
 
+#[derive(PartialEq, Debug)]
 pub struct Environ {
     values: HashMap<String, Value>,
     enclosing: Option<Env>,
 }
 
-type Env = Rc<RefCell<Environ>>;
+pub type Env = Rc<RefCell<Environ>>;
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
@@ -312,7 +313,7 @@ impl StmtVisitor<()> for Interpreter {
         body: &[Stmt],
         _loc: Loc,
     ) -> ExecuteRes {
-        let function = Function::new(name, params, body);
+        let function = Function::new(name, params, body, &self.env);
         self.env.borrow_mut().define(name, function.into());
         Ok(())
     }
