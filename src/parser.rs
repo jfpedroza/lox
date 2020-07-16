@@ -110,6 +110,14 @@ impl<'a> Parser<'a> {
         self.peek().kind == kind
     }
 
+    fn check_next(&self, kind: TokenKind) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+
+        self.input[self.current + 1].kind == kind
+    }
+
     fn consume<F>(&mut self, kind: TokenKind, err_fn: F) -> TokenRefRes<'a>
     where
         F: FnOnce(&Parser<'a>) -> ParsingError,
@@ -120,7 +128,8 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> StmtParseRes {
         let res = if self.matches(&[Var]).is_some() {
             self.var_declaration()
-        } else if self.matches(&[Fun]).is_some() {
+        } else if self.check(Fun) && self.check_next(Identifier) {
+            self.advance();
             self.function("function")
         } else {
             self.statement()
