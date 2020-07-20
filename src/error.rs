@@ -61,10 +61,13 @@ impl Display for ParsingError {
         match self {
             ExpectedExpression(loc, got) => write!(f, "[{}] Expected expression. Got {}", loc, got),
             ExpectedOpenParen(loc, after, got) => {
-                write!(f, "[{}] Expected '(' after '{}'. Got {}", loc, after, got)
+                write!(f, "[{}] Expected '(' after {}. Got {}", loc, after, got)
             }
             ExpectedCloseParen(loc, after, got) => {
                 write!(f, "[{}] Expected ')' after {}. Got {}", loc, after, got)
+            }
+            ExpectedOpenBrace(loc, before, got) => {
+                write!(f, "[{}] Expected '{{' before {}. Got {}", loc, before, got)
             }
             ExpectedCloseBrace(loc, got) => {
                 write!(f, "[{}] Expected '}}' after block. Got {}", loc, got)
@@ -77,8 +80,13 @@ impl Display for ParsingError {
             ExpectedSemicolon(loc, after, got) => {
                 write!(f, "[{}] Expected ';' after {}. Got {}", loc, after, got)
             }
-            ExpectedVarName(loc, got) => write!(f, "[{}] Expected variable name. Got {}", loc, got),
+            ExpectedName(loc, kind, got) => {
+                write!(f, "[{}] Expected {} name. Got {}", loc, kind, got)
+            }
             InvalidAssignmentTarget(loc) => write!(f, "[{}] Invalid assignment target", loc),
+            MaximumArgumentsExceeded(loc, kind) => {
+                write!(f, "[{}] Cannot have more than 255 {}", loc, kind)
+            }
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();

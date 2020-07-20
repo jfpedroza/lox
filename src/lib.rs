@@ -4,6 +4,7 @@ extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 
+mod callable;
 pub mod error;
 mod eval;
 mod expr;
@@ -16,7 +17,7 @@ mod test_utils;
 mod utils;
 mod value;
 
-use ansi_term::Color::{Blue, Cyan, Green, Purple};
+use ansi_term::Color::{Blue, Cyan, Green, Purple, Yellow};
 use error::print_err;
 use eval::Interpreter;
 use failure::{Fallible, ResultExt};
@@ -118,6 +119,7 @@ impl Lox {
                         }
                         Value::Boolean(boolean) => Purple.paint(boolean.to_string()),
                         Value::Nil => Purple.paint("nil"),
+                        Value::Callable(callable) => Yellow.paint(callable.to_string()),
                     };
                     println!("=> {}", output);
                 }

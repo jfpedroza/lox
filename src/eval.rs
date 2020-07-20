@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::callable::{populate_natives, Function, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
@@ -11,14 +12,16 @@ use std::rc::Rc;
 
 pub struct Interpreter {
     env: Env,
+    pub globals: Env,
 }
 
-struct Environ {
+#[derive(Debug)]
+pub struct Environ {
     values: HashMap<String, Value>,
     enclosing: Option<Env>,
 }
 
-type Env = Rc<RefCell<Environ>>;
+pub type Env = Rc<RefCell<Environ>>;
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
@@ -33,22 +36,32 @@ pub enum RuntimeError {
     DivisionByZero(Loc),
     #[fail(display = "[{}] Undefined variable '{}'", _0, _1)]
     UndefinedVariable(Loc, String),
+    #[fail(display = "[{}] '{}' is not callable", _0, _1)]
+    NotACallable(Loc, String),
+    #[fail(display = "[{}] Expected {} arguments but got {}", _0, _1, _2)]
+    MismatchingArity(Loc, usize, usize),
 }
 
 #[derive(Debug)]
 pub enum RuntimeInterrupt {
     Error(RuntimeError),
+    Return(Value),
     Break,
 }
 
-type ValueRes = Result<Value, RuntimeError>;
+pub type ValueRes = Result<Value, RuntimeError>;
 type ExecuteRes = Result<(), RuntimeInterrupt>;
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter {
-            env: Environ::new().into(),
-        }
+        let globals = Environ::new().into();
+        let mut inter = Interpreter {
+            env: Rc::clone(&globals),
+            globals,
+        };
+
+        populate_natives(&mut inter);
+        inter
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -67,7 +80,7 @@ impl Interpreter {
         stmt.accept(self)
     }
 
-    fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
+    pub fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
         let prev = Rc::clone(&self.env);
         self.env = env;
 
@@ -143,6 +156,11 @@ impl ExprVisitor<Value> for Interpreter {
         Ok(literal.into())
     }
 
+    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], _loc: Loc) -> ValueRes {
+        let function = Function::new_anon(params, body, &self.env);
+        Ok(function.into())
+    }
+
     fn visit_grouping_expr(&mut self, expr: &Expr, _loc: Loc) -> ValueRes {
         self.evaluate(expr)
     }
@@ -209,6 +227,28 @@ impl ExprVisitor<Value> for Interpreter {
         self.env.borrow_mut().assign(name, val, loc)?;
         Ok(cloned_val)
     }
+
+    fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> ValueRes {
+        let callee = self.evaluate(callee)?;
+        let args: Vec<_> = args
+            .iter()
+            .map(|a| self.evaluate(a))
+            .collect::<Result<_, _>>()?;
+
+        if let Value::Callable(callable) = callee {
+            if args.len() == callable.arity() {
+                callable.call(self, args)
+            } else {
+                Err(RuntimeError::mismatching_arity(
+                    loc,
+                    callable.arity(),
+                    args.len(),
+                ))
+            }
+        } else {
+            Err(RuntimeError::not_a_callable(loc, callee))
+        }
+    }
 }
 
 impl StmtVisitor<()> for Interpreter {
@@ -269,6 +309,28 @@ impl StmtVisitor<()> for Interpreter {
 
     fn visit_block_stmt(&mut self, stmts: &[Stmt], _loc: Loc) -> ExecuteRes {
         self.execute_block(stmts, Environ::with_enclosing(&self.env))
+    }
+
+    fn visit_function_stmt(
+        &mut self,
+        name: &str,
+        params: &[String],
+        body: &[Stmt],
+        _loc: Loc,
+    ) -> ExecuteRes {
+        let function = Function::new(name, params, body, &self.env);
+        self.env.borrow_mut().define(name, function.into());
+        Ok(())
+    }
+
+    fn visit_return_stmt(&mut self, ret: &Option<Expr>, _loc: Loc) -> ExecuteRes {
+        let ret_val = if let Some(expr) = ret {
+            self.evaluate(expr)?
+        } else {
+            Value::Nil
+        };
+
+        Err(RuntimeInterrupt::Return(ret_val))
     }
 
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
@@ -374,6 +436,7 @@ impl Value {
             (Str(left), Str(right)) => left == right,
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
+            (Callable(left), Callable(right)) => left == right,
             (_, _) => false,
         })
     }
@@ -416,10 +479,18 @@ impl RuntimeError {
     fn undefined_variable(loc: Loc, name: &str) -> Self {
         Self::UndefinedVariable(loc, String::from(name))
     }
+
+    fn not_a_callable(loc: Loc, callee: Value) -> Self {
+        Self::NotACallable(loc, String::from(callee.get_type()))
+    }
+
+    fn mismatching_arity(loc: Loc, expected: usize, got: usize) -> Self {
+        Self::MismatchingArity(loc, expected, got)
+    }
 }
 
 impl RuntimeInterrupt {
-    fn expect_error(self) -> RuntimeError {
+    pub fn expect_error(self) -> RuntimeError {
         use RuntimeInterrupt::*;
         match self {
             Error(error) => error,
