@@ -458,7 +458,7 @@ fn test_while_stmt() {
 
 #[test]
 fn test_for_stmt() {
-    let input = r#"for (var i = 0; i < 10; i = i + 1) {
+    let input = r#"for (var i = 0; i < 10; i += 1) {
         print i;
         break;
     }"#;
@@ -470,7 +470,7 @@ fn test_for_stmt() {
             less_expr(var_expr("i", (0, 16)), int_expr(10, (0, 20)), (0, 18)),
             Some(assign_expr(
                 "i",
-                add_expr(var_expr("i", (0, 28)), int_expr(1, (0, 32)), (0, 30)),
+                add_expr(var_expr("i", (0, 24)), int_expr(1, (0, 29)), (0, 26)),
                 (0, 24)
             )),
             block_stmt(
@@ -478,7 +478,7 @@ fn test_for_stmt() {
                     print_stmt(var_expr("i", (1, 14)), (1, 8)),
                     break_stmt((2, 8)),
                 ],
-                (0, 35)
+                (0, 32)
             ),
             (0, 0)
         )]),
@@ -609,7 +609,7 @@ fn test_missing_open_paren_if() {
     assert_eq!(
         Err(ParsingError::ExpectedOpenParen(
             Loc::new(0, 3),
-            String::from("if"),
+            String::from("'if'"),
             String::from("true")
         )),
         parser.parse()
@@ -662,8 +662,9 @@ fn test_missing_var_name() {
     let tokens = get_tokens("var 3");
     let mut parser = Parser::new(&tokens);
     assert_eq!(
-        Err(ParsingError::ExpectedVarName(
+        Err(ParsingError::ExpectedName(
             Loc::new(0, 4),
+            String::from("variable"),
             String::from("3")
         )),
         parser.parse()

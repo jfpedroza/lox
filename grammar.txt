@@ -1,15 +1,21 @@
 program        → declaration* EOF ;
 
 declaration    → varDecl
+               | funDecl
                | statement ;
 
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+
+funDecl        → "fun" function ;
+function       → IDENTIFIER "(" parameters? ")" block ;
+parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 
 statement      → exprStmt
                | ifStmt
                | printStmt
                | whileStmt
-               | block ;
+               | block
+               | returnStmt
                | break ;
 
 exprStmt       → expression ";" ;
@@ -20,9 +26,10 @@ forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
                            expression? ";"
                            expression? ")" statement ;
 block          → "{" declaration* "}" ;
+returnStmt     → "return" expression? ";" ;
 
 expression     → assignment ( "," expression )? ;
-assignment     → IDENTIFIER "=" assignment
+assignment     → IDENTIFIER assignment_op assignment
                | conditional ;
 conditional    → logic_or ( "?" expression : conditional )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
@@ -31,9 +38,17 @@ equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 comparison     → addition ( ( ">" | ">=" | "<" | "<=" ) addition )* ;
 addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
 multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
-unary          → ( "!" | "-" ) unary
-               | primary ;
+unary          → ( "!" | "-" | "++" | "--" ) unary
+               | postfix ;
+postfix        → primary ( "++" | "--" )
+               | primary ( "(" arguments? ")" )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
-               | "(" expression ")"
                | IDENTIFIER
+               | anonymous_fun
+               | "(" expression ")"
+
+anonymous_fun  → "fun" "(" parameters? ")" block ;
+
+assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
+arguments      → assignment ( "," assignment )* ;

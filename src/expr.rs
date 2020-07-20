@@ -1,10 +1,12 @@
 use crate::lexer::{Literal, TokenKind};
 use crate::location::{Loc, Located};
+use crate::stmt::Stmt;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum ExprKind {
     Literal(LitExpr),
+    Function(Vec<String>, Vec<Stmt>),
     Unary(UnOp, Box<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
     Logical(Box<Expr>, LogOp, Box<Expr>),
@@ -13,6 +15,7 @@ pub enum ExprKind {
     Conditional(Box<Expr>, Box<Expr>, Box<Expr>),
     Variable(String),
     Assign(String, Box<Expr>),
+    Call(Box<Expr>, Vec<Expr>),
 }
 
 pub type Expr = Located<ExprKind>;
@@ -22,6 +25,8 @@ pub trait Visitor<Res> {
     type Result = std::result::Result<Res, Self::Error>;
 
     fn visit_literal_expr(&mut self, literal: &LitExpr, loc: Loc) -> Self::Result;
+
+    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], loc: Loc) -> Self::Result;
 
     fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> Self::Result;
 
@@ -51,6 +56,8 @@ pub trait Visitor<Res> {
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> Self::Result;
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> Self::Result;
 }
 
 impl Expr {
@@ -65,12 +72,20 @@ impl Expr {
         Expr::new(kind, loc)
     }
 
+    pub fn integer(int: i64, loc: Loc) -> Self {
+        Expr::new(ExprKind::Literal(LitExpr::Integer(int)), loc)
+    }
+
     pub fn boolean(boolean: bool, loc: Loc) -> Self {
         Expr::new(ExprKind::Literal(LitExpr::Boolean(boolean)), loc)
     }
 
     pub fn nil(loc: Loc) -> Self {
         Expr::new(ExprKind::Literal(LitExpr::Nil), loc)
+    }
+
+    pub fn function(params: Vec<String>, body: Vec<Stmt>, loc: Loc) -> Self {
+        Expr::new(ExprKind::Function(params, body), loc)
     }
 
     pub fn unary(op: UnOp, right: Expr, loc: Loc) -> Self {
@@ -108,6 +123,10 @@ impl Expr {
         Expr::new(ExprKind::Assign(name, Box::new(expr)), loc)
     }
 
+    pub fn call(callee: Expr, args: Vec<Expr>, loc: Loc) -> Self {
+        Expr::new(ExprKind::Call(Box::new(callee), args), loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -115,6 +134,7 @@ impl Expr {
         use ExprKind::*;
         match &self.kind {
             Literal(literal) => visitor.visit_literal_expr(literal, self.loc),
+            Function(params, body) => visitor.visit_function_expr(params, body, self.loc),
             Unary(op, expr) => visitor.visit_unary_expr(op, expr, self.loc),
             Binary(left, op, right) => visitor.visit_binary_expr(left, op, right, self.loc),
             Logical(left, op, right) => visitor.visit_logical_expr(left, op, right, self.loc),
@@ -123,6 +143,7 @@ impl Expr {
             Conditional(cond, left, right) => visitor.visit_cond_expr(cond, left, right, self.loc),
             Variable(name) => visitor.visit_variable_expr(name, self.loc),
             Assign(name, expr) => visitor.visit_assign_expr(name, expr, self.loc),
+            Call(callee, args) => visitor.visit_call_expr(callee, args, self.loc),
         }
     }
 }
@@ -138,6 +159,7 @@ impl Debug for ExprKind {
         use ExprKind::*;
         let string = match &self {
             Literal(literal) => literal.to_string(),
+            Function(params, body) => format!("(fun {:?} {:?})", params, body),
             Unary(operator, right) => parenthesize(operator.to_string(), &[right]),
             Binary(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
             Logical(left, operator, right) => parenthesize(operator.to_string(), &[left, right]),
@@ -146,6 +168,7 @@ impl Debug for ExprKind {
             Conditional(cond, left, right) => parenthesize("?:", &[cond, left, right]),
             Variable(name) => format!("(var {})", name),
             Assign(name, expr) => format!("(= {} {:?})", name, expr),
+            Call(callee, args) => format!("(call {:?} {:?})", callee, args),
         };
 
         write!(f, "{}", string)
@@ -164,7 +187,7 @@ fn parenthesize(name: &str, exprs: &[&Expr]) -> String {
     parts.join("")
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum LitExpr {
     Integer(i64),
     Float(f64),
@@ -186,7 +209,7 @@ impl Display for LitExpr {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum UnOp {
     Negate,
     Not,
@@ -214,7 +237,7 @@ impl From<TokenKind> for UnOp {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum BinOp {
     Add,
     Sub,
@@ -252,11 +275,11 @@ impl From<TokenKind> for BinOp {
     fn from(kind: TokenKind) -> Self {
         use TokenKind::*;
         match kind {
-            Plus => BinOp::Add,
-            Minus => BinOp::Sub,
-            Star => BinOp::Mul,
-            Slash => BinOp::Div,
-            Percent => BinOp::Rem,
+            Plus | PlusEqual | PlusPlus => BinOp::Add,
+            Minus | MinusEqual | MinusMinus => BinOp::Sub,
+            Star | StarEqual => BinOp::Mul,
+            Slash | SlashEqual => BinOp::Div,
+            Percent | PercentEqual => BinOp::Rem,
             EqualEqual => BinOp::Equal,
             BangEqual => BinOp::NotEqual,
             Greater => BinOp::Greater,
@@ -268,7 +291,7 @@ impl From<TokenKind> for BinOp {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Copy, Clone)]
 pub enum LogOp {
     And,
     Or,

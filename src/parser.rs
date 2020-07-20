@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{BinOp, Expr, ExprKind};
 use crate::lexer::{
     Token,
     TokenKind::{self, *},
@@ -22,11 +22,13 @@ pub enum ParsingError {
     ExpectedExpression(Loc, String),
     ExpectedOpenParen(Loc, String, String),
     ExpectedCloseParen(Loc, String, String),
+    ExpectedOpenBrace(Loc, String, String),
     ExpectedCloseBrace(Loc, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
-    ExpectedVarName(Loc, String),
+    ExpectedName(Loc, String, String),
     InvalidAssignmentTarget(Loc),
+    MaximumArgumentsExceeded(Loc, String),
     Multiple(Vec<ParsingError>),
 }
 
@@ -108,6 +110,14 @@ impl<'a> Parser<'a> {
         self.peek().kind == kind
     }
 
+    fn check_next(&self, kind: TokenKind) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+
+        self.input[self.current + 1].kind == kind
+    }
+
     fn consume<F>(&mut self, kind: TokenKind, err_fn: F) -> TokenRefRes<'a>
     where
         F: FnOnce(&Parser<'a>) -> ParsingError,
@@ -118,6 +128,9 @@ impl<'a> Parser<'a> {
     fn declaration(&mut self) -> StmtParseRes {
         let res = if self.matches(&[Var]).is_some() {
             self.var_declaration()
+        } else if self.check(Fun) && self.check_next(Identifier) {
+            self.advance();
+            self.function("function")
         } else {
             self.statement()
         };
@@ -139,6 +152,8 @@ impl<'a> Parser<'a> {
             self.while_statement()
         } else if self.matches(&[For]).is_some() {
             self.for_statement()
+        } else if self.matches(&[Return]).is_some() {
+            self.return_statement()
         } else if let Some(token) = self.matches(&[LeftBrace]) {
             Ok(Stmt::block(self.block()?, token.loc))
         } else if let Some(token) = self.matches(&[Break]) {
@@ -151,7 +166,7 @@ impl<'a> Parser<'a> {
 
     fn if_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("if"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'if'"))?;
         let cond = self.expression()?;
         self.consume(RightParen, |p| p.expected_close_paren_error("if condition"))?;
 
@@ -173,7 +188,7 @@ impl<'a> Parser<'a> {
 
     fn while_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("while"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'while'"))?;
         let cond = self.expression()?;
         self.consume(RightParen, |p| {
             p.expected_close_paren_error("while condition")
@@ -186,7 +201,7 @@ impl<'a> Parser<'a> {
 
     fn for_statement(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        self.consume(LeftParen, |p| p.expected_open_paren_error("for"))?;
+        self.consume(LeftParen, |p| p.expected_open_paren_error("'for'"))?;
 
         let init = if self.matches(&[Semicolon]).is_some() {
             None
@@ -240,9 +255,22 @@ impl<'a> Parser<'a> {
         Ok(stmts)
     }
 
+    fn return_statement(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        let ret = if !self.check(Semicolon) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+
+        self.consume(Semicolon, |p| p.expected_semicolon_error("return value"))?;
+
+        Ok(Stmt::return_stmt(ret, *loc))
+    }
+
     fn var_declaration(&mut self) -> StmtParseRes {
         let Token { loc, .. } = self.previous();
-        let name = self.consume(Identifier, Self::expected_var_name_error)?;
+        let name = self.consume(Identifier, |p| p.expected_name_error("variable"))?;
         let init = if self.matches(&[Equal]).is_some() {
             Some(self.expression()?)
         } else {
@@ -254,6 +282,44 @@ impl<'a> Parser<'a> {
         })?;
 
         Ok(Stmt::var(name.lexeme, init, *loc))
+    }
+
+    fn function(&mut self, kind: &str) -> StmtParseRes {
+        let name = self.consume(Identifier, |p| p.expected_name_error(kind))?;
+        let params = self.function_params(&format!("{} name", kind))?;
+
+        self.consume(LeftBrace, |p| {
+            p.expected_open_brace_error(&format!("{} body", kind))
+        })?;
+        let body = self.block()?;
+
+        Ok(Stmt::function(name.lexeme, params, body, name.loc))
+    }
+
+    fn function_params(&mut self, open_paren_after: &str) -> Result<Vec<String>, ParsingError> {
+        self.consume(LeftParen, |p| p.expected_open_paren_error(open_paren_after))?;
+
+        let mut params = Vec::new();
+        if !self.check(RightParen) {
+            params.push(self.consume(Identifier, |p| p.expected_name_error("parameter"))?);
+            while self.matches(&[Comma]).is_some() {
+                params.push(self.consume(Identifier, |p| p.expected_name_error("parameter"))?);
+            }
+
+            if params.len() > 255 {
+                let loc = params[256].loc;
+                self.errors
+                    .push(ParsingError::max_args_exceeded(loc, "parameters"));
+            }
+        }
+
+        self.consume(RightParen, |p| p.expected_close_paren_error("parameters"))?;
+
+        let params = params
+            .iter()
+            .map(|param| String::from(param.lexeme))
+            .collect();
+        Ok(params)
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {
@@ -280,18 +346,39 @@ impl<'a> Parser<'a> {
     fn assignment(&mut self) -> ExprParseRes {
         let expr = self.conditional()?;
 
-        if let Some(token) = self.matches(&[Equal]) {
+        if let Some(token) = self.matches(&[
+            Equal,
+            PlusEqual,
+            MinusEqual,
+            StarEqual,
+            SlashEqual,
+            PercentEqual,
+        ]) {
             let value = self.expression()?;
-
-            if let ExprKind::Variable(name) = expr.kind {
-                return Ok(Expr::assign(name, value, expr.loc));
-            } else {
-                self.errors
-                    .push(ParsingError::InvalidAssignmentTarget(token.loc));
-            }
+            return self.make_assign_expr(expr, token, value);
         }
 
         Ok(expr)
+    }
+
+    fn make_assign_expr(&mut self, expr: Expr, op_token: &Token, value: Expr) -> ExprParseRes {
+        Ok(if let ExprKind::Variable(name) = expr.kind {
+            let assign_value = match op_token.kind {
+                Equal => value,
+                PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
+                | PercentEqual => {
+                    let op = op_token.kind.into();
+                    Expr::binary(Expr::variable(&name, expr.loc), op, value, op_token.loc)
+                }
+                _ => unreachable!(),
+            };
+
+            Expr::assign(name, assign_value, expr.loc)
+        } else {
+            self.errors
+                .push(ParsingError::InvalidAssignmentTarget(expr.loc));
+            value
+        })
     }
 
     fn conditional(&mut self) -> ExprParseRes {
@@ -368,14 +455,74 @@ impl<'a> Parser<'a> {
         if let Some(op_token) = self.matches(&[Bang, Minus]) {
             let op = op_token.kind.into();
             let right = self.unary()?;
-            return Ok(Expr::unary(op, right, op_token.loc));
+            Ok(Expr::unary(op, right, op_token.loc))
+        } else if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
+            let right = self.unary()?;
+            // ++i generates i = i + 1
+            self.make_assign_expr(right, op_token, Expr::integer(1, op_token.loc))
+        } else {
+            self.postfix()
+        }
+    }
+
+    fn postfix(&mut self) -> ExprParseRes {
+        let left = self.primary()?;
+
+        if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
+            // i++ generates i = i + 1, i - 1
+            let one = Expr::integer(1, op_token.loc);
+            let left = self.make_assign_expr(left, op_token, one)?;
+            let name = match left.kind {
+                ExprKind::Assign(ref name, _) => name,
+                _ => unreachable!(),
+            };
+
+            let op = match op_token.kind {
+                PlusPlus => BinOp::Sub,
+                MinusMinus => BinOp::Add,
+                _ => unreachable!(),
+            };
+
+            let one = Expr::integer(1, op_token.loc);
+            let right = Expr::binary(Expr::variable(name, left.loc), op, one, op_token.loc);
+
+            let left_loc = left.loc;
+            Ok(Expr::comma(left, right, left_loc))
+        } else {
+            let mut expr = left;
+            while self.matches(&[LeftParen]).is_some() {
+                expr = self.finish_call(expr)?;
+            }
+
+            Ok(expr)
+        }
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> ExprParseRes {
+        let mut args = Vec::new();
+
+        if !self.check(RightParen) {
+            args.push(self.assignment()?);
+            while self.matches(&[Comma]).is_some() {
+                args.push(self.assignment()?);
+            }
+
+            if args.len() > 255 {
+                let loc = args[256].loc;
+                self.errors
+                    .push(ParsingError::max_args_exceeded(loc, "arguments"));
+            }
         }
 
-        self.primary()
+        let token = self.consume(RightParen, |p| p.expected_close_paren_error("arguments"))?;
+
+        Ok(Expr::call(callee, args, token.loc))
     }
 
     fn primary(&mut self) -> ExprParseRes {
-        let primary_tokens = [False, True, Nil, Integer, Float, Str, LeftParen, Identifier];
+        let primary_tokens = [
+            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, Fun,
+        ];
         let token = self
             .matches(&primary_tokens)
             .ok_or_else(|| self.expected_expression_error())?;
@@ -394,8 +541,22 @@ impl<'a> Parser<'a> {
                 Expr::grouping(expr, token.loc)
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
+            Fun => self.anon_function()?,
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
         })
+    }
+
+    fn anon_function(&mut self) -> ExprParseRes {
+        let Token { loc, .. } = self.previous();
+
+        let params = self.function_params("'fun'")?;
+
+        self.consume(LeftBrace, |p| {
+            p.expected_open_brace_error("anonymous function body")
+        })?;
+        let body = self.block()?;
+
+        Ok(Expr::function(params, body, *loc))
     }
 
     fn synchronize(&mut self) {
@@ -424,6 +585,11 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedCloseParen(token.loc, String::from(after), token.lexeme.to_string())
     }
 
+    fn expected_open_brace_error(&self, before: &str) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedOpenBrace(token.loc, String::from(before), token.lexeme.to_string())
+    }
+
     fn expected_close_brace_error(&self) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedCloseBrace(token.loc, token.lexeme.to_string())
@@ -444,8 +610,14 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedSemicolon(token.loc, String::from(after), token.lexeme.to_string())
     }
 
-    fn expected_var_name_error(&self) -> ParsingError {
+    fn expected_name_error(&self, kind: &str) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedVarName(token.loc, token.lexeme.to_string())
+        ParsingError::ExpectedName(token.loc, String::from(kind), token.lexeme.to_string())
+    }
+}
+
+impl ParsingError {
+    fn max_args_exceeded(loc: Loc, kind: &str) -> Self {
+        ParsingError::MaximumArgumentsExceeded(loc, String::from(kind))
     }
 }

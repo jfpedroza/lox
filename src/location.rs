@@ -53,3 +53,12 @@ impl<T: PartialEq + Default> Default for Located<T> {
         }
     }
 }
+
+impl<T: PartialEq + Clone> Clone for Located<T> {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            loc: self.loc,
+        }
+    }
+}

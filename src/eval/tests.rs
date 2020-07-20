@@ -1,4 +1,5 @@
 use super::*;
+use crate::callable::Callable;
 use crate::test_utils::*;
 use crate::value::{types::*, Value::*};
 
@@ -398,6 +399,29 @@ fn test_var_assignment() {
 }
 
 #[test]
+fn test_var_assignment2() {
+    let input = r#"var i = 0;
+    i += 1;
+    i -= 3;
+    i *= -15;
+    i /= 3;
+    i %= 4;
+    var j = ++i;
+    var k = --i;
+    var l = k--;
+    var m = j++;
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(2.into()), env_get(&inter, "i"));
+    assert_eq!(Ok(4.into()), env_get(&inter, "j"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "k"));
+    assert_eq!(Ok(2.into()), env_get(&inter, "l"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "m"));
+}
+
+#[test]
 fn test_var_assignment_in_block() {
     let input = r#"var hello = "world";
     {
@@ -488,7 +512,7 @@ fn test_var_print() {
 fn test_while_stmt() {
     let input = r#"var i = 0;
     while (i < 10) {
-        i = i + 1;
+        i += 1;
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
@@ -499,7 +523,7 @@ fn test_while_stmt() {
 #[test]
 fn test_for_stmt() {
     let input = r#"var i;
-    for (i = 0; i < 10; i = i + 1) {}"#;
+    for (i = 0; i < 10; ++i) {}"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
@@ -509,13 +533,126 @@ fn test_for_stmt() {
 #[test]
 fn test_for_break_stmt() {
     let input = r#"var i;
-    for (i = 0; ; i = i + 1) {
-        if (i == 10) break;
+    for (i = 10; ; --i) {
+        if (i == 0) break;
     }"#;
     let stmts = get_stmts(input);
     let mut inter = Interpreter::new();
     assert_eq!(Ok(()), inter.interpret(&stmts));
-    assert_eq!(Ok(10.into()), env_get(&inter, "i"));
+    assert_eq!(Ok(0.into()), env_get(&inter, "i"));
+}
+
+#[test]
+fn test_function_stmt() {
+    let input = r#"
+    fun my_fun() {}
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    let fun = env_get(&inter, "my_fun").unwrap();
+    match fun {
+        Value::Callable(Callable::Function(fun)) => {
+            assert_eq!(fun.name, Some(String::from("my_fun")));
+        }
+        val => panic!("Not a function! {:?}", val),
+    }
+}
+
+#[test]
+fn test_function_call() {
+    let input = r#"
+    fun salute(name) { return "Hello, " + name; }
+    var salutation = salute("World!");
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("Hello, World!".into()), env_get(&inter, "salutation"));
+}
+
+#[test]
+fn test_function_call_native() {
+    let input = r#"
+    var time = clock();
+    var age = str(23);
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert!(matches!(env_get(&inter, "time").unwrap(), Integer(_)));
+    assert_eq!(Ok("23".into()), env_get(&inter, "age"));
+}
+
+#[test]
+fn test_local_function() {
+    let input = r#"
+    fun outer() {
+        fun inner() {
+            return "Inner!";
+        }
+
+        return inner;
+    }
+
+    var inner = outer();
+    var res = inner();
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("Inner!".into()), env_get(&inter, "res"));
+}
+
+#[test]
+fn test_closures() {
+    let input = r#"
+    var global_get;
+    var global_set;
+
+    fun outer() {
+        var x = "initial";
+
+        fun get_x() {
+            return x;
+        }
+
+        fun set_x() {
+            x = "updated";
+        }
+
+        global_get = get_x;
+        global_set = set_x;
+    }
+
+    outer();
+    var before = global_get();
+    global_set();
+    var after = global_get();
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("initial".into()), env_get(&inter, "before"));
+    assert_eq!(Ok("updated".into()), env_get(&inter, "after"));
+}
+
+#[test]
+fn test_anon_function() {
+    let input = r#"
+    fun outer() {
+        return fun () {
+            return "Inner!";
+        };
+    }
+
+    var inner = outer();
+    var res = inner();
+    "#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("Inner!".into()), env_get(&inter, "res"));
 }
 
 #[test]
@@ -542,6 +679,42 @@ fn test_undefined_variable_in_assignment() {
             Loc::new(0, 0),
             String::from("hello")
         )),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_not_a_callable() {
+    let input = r#""world"();"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(
+        Err(RuntimeError::NotACallable(
+            Loc::new(0, 8),
+            String::from(STRING)
+        )),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_too_few_arguments() {
+    let input = r#"str();"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(
+        Err(RuntimeError::MismatchingArity(Loc::new(0, 4), 1, 0)),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_too_many_arguments() {
+    let input = r#"clock(1);"#;
+    let stmts = get_stmts(input);
+    let mut inter = Interpreter::new();
+    assert_eq!(
+        Err(RuntimeError::MismatchingArity(Loc::new(0, 7), 0, 1)),
         inter.interpret(&stmts)
     );
 }

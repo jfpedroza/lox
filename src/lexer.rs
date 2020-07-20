@@ -17,14 +17,21 @@ pub enum TokenKind {
     Dot,
     Question,
     Colon,
-    Minus,
-    Plus,
     Semicolon,
-    Slash,
-    Star,
-    Percent,
 
     // One or two character tokens
+    Minus,
+    MinusEqual,
+    MinusMinus,
+    Plus,
+    PlusEqual,
+    PlusPlus,
+    Slash,
+    SlashEqual,
+    Star,
+    StarEqual,
+    Percent,
+    PercentEqual,
     Bang,
     BangEqual,
     Equal,
@@ -191,11 +198,39 @@ impl<'a> Scanner<'a> {
             '.' => self.create_token(Dot),
             '?' => self.create_token(Question),
             ':' => self.create_token(Colon),
-            '-' => self.create_token(Minus),
-            '+' => self.create_token(Plus),
             ';' => self.create_token(Semicolon),
-            '*' => self.create_token(Star),
-            '%' => self.create_token(Percent),
+            '-' => {
+                let kind = if self.matches('=') {
+                    MinusEqual
+                } else if self.matches('-') {
+                    MinusMinus
+                } else {
+                    Minus
+                };
+                self.create_token(kind)
+            }
+            '+' => {
+                let kind = if self.matches('=') {
+                    PlusEqual
+                } else if self.matches('+') {
+                    PlusPlus
+                } else {
+                    Plus
+                };
+                self.create_token(kind)
+            }
+            '*' => {
+                let kind = if self.matches('=') { StarEqual } else { Star };
+                self.create_token(kind)
+            }
+            '%' => {
+                let kind = if self.matches('=') {
+                    PercentEqual
+                } else {
+                    Percent
+                };
+                self.create_token(kind)
+            }
             '!' => {
                 let kind = if self.matches('=') { BangEqual } else { Bang };
                 self.create_token(kind)
@@ -224,7 +259,8 @@ impl<'a> Scanner<'a> {
                     self.skip_block_comment()?;
                     return Ok(None);
                 } else {
-                    self.create_token(Slash)
+                    let kind = if self.matches('=') { SlashEqual } else { Slash };
+                    self.create_token(kind)
                 }
             }
             '"' => self.recognize_string()?,
