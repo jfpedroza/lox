@@ -5,10 +5,10 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Callable {
     Native(NativeFunction),
-    Function(Function),
+    Function(Rc<Function>),
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -17,11 +17,11 @@ pub enum NativeFunction {
     Str,
 }
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Function {
-    name: Rc<Option<String>>,
-    params: Rc<Vec<String>>,
-    body: Rc<Vec<Stmt>>,
+    pub name: Option<String>,
+    params: Vec<String>,
+    body: Vec<Stmt>,
     closure: Env,
 }
 
@@ -73,6 +73,17 @@ impl LoxCallable for Callable {
     }
 }
 
+impl PartialEq for Callable {
+    fn eq(&self, other: &Self) -> bool {
+        use Callable::*;
+        match (self, other) {
+            (Native(left), Native(right)) => left == right,
+            (Function(left), Function(right)) => Rc::ptr_eq(left, right),
+            (_, _) => false,
+        }
+    }
+}
+
 impl NativeFunction {
     fn name(&self) -> &'static str {
         use NativeFunction::*;
@@ -116,18 +127,18 @@ impl From<NativeFunction> for Callable {
 impl Function {
     pub fn new(name: &str, params: &[String], body: &[Stmt], closure: &Env) -> Self {
         Self {
-            name: Rc::new(Some(String::from(name))),
-            params: Rc::new(params.to_vec()),
-            body: Rc::new(body.to_vec()),
+            name: Some(String::from(name)),
+            params: params.to_vec(),
+            body: body.to_vec(),
             closure: Rc::clone(closure),
         }
     }
 
     pub fn new_anon(params: &[String], body: &[Stmt], closure: &Env) -> Self {
         Self {
-            name: Rc::new(None),
-            params: Rc::new(params.to_vec()),
-            body: Rc::new(body.to_vec()),
+            name: None,
+            params: params.to_vec(),
+            body: body.to_vec(),
             closure: Rc::clone(closure),
         }
     }
@@ -163,7 +174,7 @@ impl Display for Function {
 
 impl From<Function> for Callable {
     fn from(function: Function) -> Self {
-        Callable::Function(function)
+        Callable::Function(Rc::new(function))
     }
 }
 

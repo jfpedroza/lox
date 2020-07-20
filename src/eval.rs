@@ -15,7 +15,7 @@ pub struct Interpreter {
     pub globals: Env,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(Debug)]
 pub struct Environ {
     values: HashMap<String, Value>,
     enclosing: Option<Env>,
@@ -436,6 +436,7 @@ impl Value {
             (Str(left), Str(right)) => left == right,
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
+            (Callable(left), Callable(right)) => left == right,
             (_, _) => false,
         })
     }
