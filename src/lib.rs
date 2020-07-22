@@ -11,6 +11,7 @@ mod expr;
 mod lexer;
 mod location;
 mod parser;
+mod resolver;
 mod stmt;
 #[cfg(test)]
 mod test_utils;
@@ -23,6 +24,7 @@ use eval::Interpreter;
 use failure::{Fallible, ResultExt};
 use lexer::Scanner;
 use parser::Parser;
+use resolver::Resolver;
 use rustyline::{config::Configurer, error::ReadlineError, Editor};
 use std::ffi::OsStr;
 use std::io::{stdin, Read};
@@ -48,6 +50,9 @@ impl Lox {
 
         let mut parser = Parser::new(&tokens);
         let stmts = parser.parse()?;
+
+        let mut resolver = Resolver::new(&mut self.inter);
+        resolver.resolve_stmts(&stmts)?;
 
         self.inter.interpret(&stmts)?;
 

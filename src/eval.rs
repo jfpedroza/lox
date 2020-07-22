@@ -97,6 +97,8 @@ impl Interpreter {
         self.env = prev;
         Ok(())
     }
+
+    pub fn resolve(&mut self, _size: usize) {}
 }
 
 impl Environ {
