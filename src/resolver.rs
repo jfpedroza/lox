@@ -11,11 +11,10 @@ pub struct Resolver<'a> {
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum ResolutionError {
-    #[fail(
-        display = "[{}] Cannot read local variable in its own initializer.",
-        _0
-    )]
+    #[fail(display = "[{}] Cannot read local variable in its own initializer", _0)]
     VarInInitalizer(Loc),
+    #[fail(display = "[{}] Variable '{}' already declared in this scope", _0, _1)]
+    VarAlreadyInScope(Loc, String),
 }
 
 type ResolveRes = Result<(), ResolutionError>;
@@ -53,17 +52,22 @@ impl<'a> Resolver<'a> {
     }
 
     fn begin_scope(&mut self) {
-        self.scopes.push(HashMap::new())
+        self.scopes.push(HashMap::new());
     }
 
     fn end_scope(&mut self) {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &str) {
+    fn declare(&mut self, name: &str, loc: Loc) -> ResolveRes {
         if let Some(scope) = self.scopes.last_mut() {
+            if scope.contains_key(name) {
+                return Err(ResolutionError::var_already_in_scope(loc, name));
+            }
             scope.insert(String::from(name), false);
         }
+
+        Ok(())
     }
 
     fn define(&mut self, name: &str) {
@@ -72,11 +76,13 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_local(&mut self, name: &str) {
-        for i in self.scopes.len()..=0 {
-            if self.scopes[i].contains_key(name) {
-                self.inter.resolve(self.scopes.len() - 1 - i);
-                return;
+    fn resolve_local(&mut self, name: &str, loc: Loc) {
+        if !self.scopes.is_empty() {
+            for i in (0..self.scopes.len()).rev() {
+                if self.scopes[i].contains_key(name) {
+                    self.inter.resolve(name, loc, self.scopes.len() - 1 - i);
+                    return;
+                }
             }
         }
     }
@@ -85,7 +91,8 @@ impl<'a> Resolver<'a> {
         self.begin_scope();
 
         for param in params {
-            self.declare(param);
+            // TODO: Use a proper location
+            self.declare(param, Loc::default())?;
             self.define(param);
         }
 
@@ -149,19 +156,19 @@ impl ExprVisitor<()> for Resolver<'_> {
 
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> ResolveRes {
         if let Some(scope) = self.scopes.last() {
-            if !scope[name] {
+            if Some(&false) == scope.get(name) {
                 return Err(ResolutionError::VarInInitalizer(loc));
             }
         }
 
-        self.resolve_local(name);
+        self.resolve_local(name, loc);
 
         Ok(())
     }
 
-    fn visit_assign_expr(&mut self, name: &str, expr: &Expr, _loc: Loc) -> ResolveRes {
+    fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ResolveRes {
         self.resolve_expr(expr)?;
-        self.resolve_local(name);
+        self.resolve_local(name, loc);
         Ok(())
     }
 
@@ -203,8 +210,8 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.resolve_stmt(body)
     }
 
-    fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, _loc: Loc) -> ResolveRes {
-        self.declare(name);
+    fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> ResolveRes {
+        self.declare(name, loc)?;
         if let Some(init_expr) = init {
             self.resolve_expr(init_expr)?;
         }
@@ -226,9 +233,9 @@ impl StmtVisitor<()> for Resolver<'_> {
         name: &str,
         params: &[String],
         body: &[Stmt],
-        _loc: Loc,
+        loc: Loc,
     ) -> ResolveRes {
-        self.declare(name);
+        self.declare(name, loc)?;
         self.define(name);
 
         self.resolve_function(params, body)
@@ -244,5 +251,11 @@ impl StmtVisitor<()> for Resolver<'_> {
 
     fn visit_break_stmt(&mut self, _loc: Loc) -> ResolveRes {
         Ok(())
+    }
+}
+
+impl ResolutionError {
+    fn var_already_in_scope(loc: Loc, name: &str) -> Self {
+        Self::VarAlreadyInScope(loc, String::from(name))
     }
 }

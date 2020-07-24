@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct Loc {
     pub line: usize,
     pub column: usize,

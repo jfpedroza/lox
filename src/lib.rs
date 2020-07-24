@@ -109,6 +109,9 @@ impl Lox {
         parser.allow_expression = true;
         let stmts = parser.parse()?;
 
+        let mut resolver = Resolver::new(&mut self.inter);
+        resolver.resolve_stmts(&stmts)?;
+
         if stmts.len() == 1 {
             match stmts.first().unwrap() {
                 Stmt {

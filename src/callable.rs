@@ -165,8 +165,8 @@ impl LoxCallable for Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self.name.as_ref() {
-            Some(name) => write!(f, "<fn {}>", name),
+        match self.name {
+            Some(ref name) => write!(f, "<fn {}>", name),
             None => write!(f, "<anonymous fn>"),
         }
     }
