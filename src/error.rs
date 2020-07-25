@@ -1,8 +1,9 @@
 use crate::eval::RuntimeError;
 use crate::lexer::ScanningError;
 use crate::parser::ParsingError;
+use crate::resolver::ResolutionError;
 use ansi_term::Color::Red;
-use failure::Error;
+use failure::{Error, Fail};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 pub fn print_err(err: &Error) {
@@ -14,11 +15,18 @@ pub fn print_err(err: &Error) {
     }
 }
 
+fn is_type<T: Fail>(err: &Error) -> bool {
+    err.downcast_ref::<T>().is_some()
+}
+
+fn is_syntax_err(err: &Error) -> bool {
+    is_type::<ScanningError>(err) || is_type::<ParsingError>(err) || is_type::<ResolutionError>(err)
+}
+
 fn error_type(err: &Error) -> &'static str {
-    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
-    {
+    if is_syntax_err(err) {
         "SyntaxError"
-    } else if err.downcast_ref::<RuntimeError>().is_some() {
+    } else if is_type::<RuntimeError>(err) {
         "RuntimeError"
     } else {
         "Error"
@@ -26,10 +34,9 @@ fn error_type(err: &Error) -> &'static str {
 }
 
 pub fn exit_code(err: &Error) -> i32 {
-    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
-    {
+    if is_syntax_err(err) {
         65
-    } else if err.downcast_ref::<RuntimeError>().is_some() {
+    } else if is_type::<RuntimeError>(err) {
         70
     } else {
         1

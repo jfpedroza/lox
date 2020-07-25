@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::callable::{populate_natives, Function, LoxCallable};
-use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
 use crate::value::Value;
@@ -216,7 +216,8 @@ impl ExprVisitor<Value> for Interpreter {
         Ok(literal.into())
     }
 
-    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], _loc: Loc) -> ValueRes {
+    fn visit_function_expr(&mut self, params: &[Param], body: &[Stmt], _loc: Loc) -> ValueRes {
+        let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
         let function = Function::new_anon(params, body, &self.env);
         Ok(function.into())
     }
@@ -380,10 +381,11 @@ impl StmtVisitor<()> for Interpreter {
     fn visit_function_stmt(
         &mut self,
         name: &str,
-        params: &[String],
+        params: &[Param],
         body: &[Stmt],
         _loc: Loc,
     ) -> ExecuteRes {
+        let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
         let function = Function::new(name, params, body, &self.env);
         self.env.borrow_mut().define(name, function.into());
         Ok(())

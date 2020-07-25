@@ -125,19 +125,19 @@ impl From<NativeFunction> for Callable {
 }
 
 impl Function {
-    pub fn new(name: &str, params: &[String], body: &[Stmt], closure: &Env) -> Self {
+    pub fn new(name: &str, params: Vec<String>, body: &[Stmt], closure: &Env) -> Self {
         Self {
             name: Some(String::from(name)),
-            params: params.to_vec(),
+            params,
             body: body.to_vec(),
             closure: Rc::clone(closure),
         }
     }
 
-    pub fn new_anon(params: &[String], body: &[Stmt], closure: &Env) -> Self {
+    pub fn new_anon(params: Vec<String>, body: &[Stmt], closure: &Env) -> Self {
         Self {
             name: None,
-            params: params.to_vec(),
+            params,
             body: body.to_vec(),
             closure: Rc::clone(closure),
         }

@@ -6,7 +6,7 @@ use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 #[derive(PartialEq, Clone)]
 pub enum ExprKind {
     Literal(LitExpr),
-    Function(Vec<String>, Vec<Stmt>),
+    Function(Vec<Param>, Vec<Stmt>),
     Unary(UnOp, Box<Expr>),
     Binary(Box<Expr>, BinOp, Box<Expr>),
     Logical(Box<Expr>, LogOp, Box<Expr>),
@@ -19,6 +19,7 @@ pub enum ExprKind {
 }
 
 pub type Expr = Located<ExprKind>;
+pub type Param = Located<String>;
 
 pub trait Visitor<Res> {
     type Error;
@@ -26,7 +27,7 @@ pub trait Visitor<Res> {
 
     fn visit_literal_expr(&mut self, literal: &LitExpr, loc: Loc) -> Self::Result;
 
-    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], loc: Loc) -> Self::Result;
+    fn visit_function_expr(&mut self, params: &[Param], body: &[Stmt], loc: Loc) -> Self::Result;
 
     fn visit_unary_expr(&mut self, op: &UnOp, expr: &Expr, loc: Loc) -> Self::Result;
 
@@ -84,7 +85,7 @@ impl Expr {
         Expr::new(ExprKind::Literal(LitExpr::Nil), loc)
     }
 
-    pub fn function(params: Vec<String>, body: Vec<Stmt>, loc: Loc) -> Self {
+    pub fn function(params: Vec<Param>, body: Vec<Stmt>, loc: Loc) -> Self {
         Expr::new(ExprKind::Function(params, body), loc)
     }
 

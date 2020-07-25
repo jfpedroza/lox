@@ -1,5 +1,5 @@
 use crate::eval::Interpreter;
-use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
 use std::collections::HashMap;
@@ -15,6 +15,11 @@ pub enum ResolutionError {
     VarInInitalizer(Loc),
     #[fail(display = "[{}] Variable '{}' already declared in this scope", _0, _1)]
     VarAlreadyInScope(Loc, String),
+    #[fail(
+        display = "[{}] Duplicate argument '{}' in function definition",
+        _0, _1
+    )]
+    DuplicateArgumentName(Loc, String),
 }
 
 type ResolveRes = Result<(), ResolutionError>;
@@ -59,15 +64,26 @@ impl<'a> Resolver<'a> {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &str, loc: Loc) -> ResolveRes {
+    fn declare_name<F>(&mut self, name: &str, err_fn: F) -> ResolveRes
+    where
+        F: FnOnce() -> ResolutionError,
+    {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(name) {
-                return Err(ResolutionError::var_already_in_scope(loc, name));
+                return Err(err_fn());
             }
             scope.insert(String::from(name), false);
         }
 
         Ok(())
+    }
+
+    fn declare_var(&mut self, name: &str, loc: Loc) -> ResolveRes {
+        self.declare_name(name, || ResolutionError::var_already_in_scope(loc, name))
+    }
+
+    fn declare_param(&mut self, name: &str, loc: Loc) -> ResolveRes {
+        self.declare_name(name, || ResolutionError::duplicate_arg_name(loc, name))
     }
 
     fn define(&mut self, name: &str) {
@@ -87,13 +103,12 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, params: &[String], body: &[Stmt]) -> ResolveRes {
+    fn resolve_function(&mut self, params: &[Param], body: &[Stmt]) -> ResolveRes {
         self.begin_scope();
 
-        for param in params {
-            // TODO: Use a proper location
-            self.declare(param, Loc::default())?;
-            self.define(param);
+        for Param { kind: name, loc } in params {
+            self.declare_param(name, *loc)?;
+            self.define(name);
         }
 
         self.resolve_stmts(body)?;
@@ -109,7 +124,7 @@ impl ExprVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], _loc: Loc) -> ResolveRes {
+    fn visit_function_expr(&mut self, params: &[Param], body: &[Stmt], _loc: Loc) -> ResolveRes {
         self.resolve_function(params, body)
     }
 
@@ -211,7 +226,7 @@ impl StmtVisitor<()> for Resolver<'_> {
     }
 
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> ResolveRes {
-        self.declare(name, loc)?;
+        self.declare_var(name, loc)?;
         if let Some(init_expr) = init {
             self.resolve_expr(init_expr)?;
         }
@@ -231,11 +246,11 @@ impl StmtVisitor<()> for Resolver<'_> {
     fn visit_function_stmt(
         &mut self,
         name: &str,
-        params: &[String],
+        params: &[Param],
         body: &[Stmt],
         loc: Loc,
     ) -> ResolveRes {
-        self.declare(name, loc)?;
+        self.declare_var(name, loc)?;
         self.define(name);
 
         self.resolve_function(params, body)
@@ -257,5 +272,9 @@ impl StmtVisitor<()> for Resolver<'_> {
 impl ResolutionError {
     fn var_already_in_scope(loc: Loc, name: &str) -> Self {
         Self::VarAlreadyInScope(loc, String::from(name))
+    }
+
+    fn duplicate_arg_name(loc: Loc, name: &str) -> Self {
+        Self::DuplicateArgumentName(loc, String::from(name))
     }
 }
