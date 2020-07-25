@@ -7,7 +7,14 @@ use std::collections::HashMap;
 pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
+    current_fun: FunctionType,
     errors: Vec<ResolutionError>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum FunctionType {
+    None,
+    Function,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -15,6 +22,7 @@ pub enum ResolutionError {
     VarInInitalizer(Loc),
     VarAlreadyInScope(Loc, String),
     DuplicateArgumentName(Loc, String),
+    ReturnOutsideFun(Loc),
     Multiple(Vec<ResolutionError>),
 }
 
@@ -25,6 +33,7 @@ impl<'a> Resolver<'a> {
         Self {
             inter,
             scopes: Vec::new(),
+            current_fun: FunctionType::None,
             errors: vec![],
         }
     }
@@ -117,7 +126,15 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, params: &[Param], body: &[Stmt]) -> ResolveRes {
+    fn resolve_function(
+        &mut self,
+        params: &[Param],
+        body: &[Stmt],
+        fun_type: FunctionType,
+    ) -> ResolveRes {
+        let enclosing_fun = self.current_fun;
+        self.current_fun = fun_type;
+
         self.begin_scope();
 
         for Param { kind: name, loc } in params {
@@ -127,6 +144,9 @@ impl<'a> Resolver<'a> {
 
         self.resolve_stmts(body)?;
         self.end_scope();
+
+        self.current_fun = enclosing_fun;
+
         Ok(())
     }
 }
@@ -139,7 +159,7 @@ impl ExprVisitor<()> for Resolver<'_> {
     }
 
     fn visit_function_expr(&mut self, params: &[Param], body: &[Stmt], _loc: Loc) -> ResolveRes {
-        self.resolve_function(params, body)
+        self.resolve_function(params, body, FunctionType::Function)
     }
 
     fn visit_grouping_expr(&mut self, expr: &Expr, _loc: Loc) -> ResolveRes {
@@ -268,10 +288,14 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.declare_var(name, loc)?;
         self.define(name);
 
-        self.resolve_function(params, body)
+        self.resolve_function(params, body, FunctionType::Function)
     }
 
-    fn visit_return_stmt(&mut self, ret: &Option<Expr>, _loc: Loc) -> ResolveRes {
+    fn visit_return_stmt(&mut self, ret: &Option<Expr>, loc: Loc) -> ResolveRes {
+        if self.current_fun == FunctionType::None {
+            self.errors.push(ResolutionError::ReturnOutsideFun(loc));
+        }
+
         if let Some(ret_expr) = ret {
             self.resolve_expr(ret_expr)?;
         }

@@ -122,6 +122,7 @@ impl Display for ResolutionError {
                 "[{}] Duplicate argument '{}' in function definition",
                 loc, name
             ),
+            ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();
