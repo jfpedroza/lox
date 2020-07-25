@@ -24,7 +24,7 @@ pub fn get_stmts(input: &str) -> (Vec<Stmt>, Interpreter) {
 
     let mut inter = Interpreter::new();
     let mut resolver = Resolver::new(&mut inter);
-    resolver.resolve_stmts(&stmts).unwrap();
+    resolver.resolve(&stmts).unwrap();
 
     (stmts, inter)
 }

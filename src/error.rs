@@ -102,3 +102,31 @@ impl Display for ParsingError {
         }
     }
 }
+
+impl Display for ResolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use ResolutionError::*;
+        match self {
+            VarInInitalizer(loc) => write!(
+                f,
+                "[{}] Cannot read local variable in its own initializer",
+                loc
+            ),
+            VarAlreadyInScope(loc, name) => write!(
+                f,
+                "[{}] Variable '{}' already declared in this scope",
+                loc, name
+            ),
+            DuplicateArgumentName(loc, name) => write!(
+                f,
+                "[{}] Duplicate argument '{}' in function definition",
+                loc, name
+            ),
+            Multiple(errors) => {
+                let error_string: String =
+                    errors.iter().map(|error| format!("\n{}", error)).collect();
+                write!(f, "Multiple errors encountered{}", error_string)
+            }
+        }
+    }
+}

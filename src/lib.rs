@@ -1,4 +1,7 @@
 #![feature(associated_type_defaults)]
+#![feature(never_type)]
+#![feature(exhaustive_patterns)]
+#![allow(clippy::diverging_sub_expression)]
 
 extern crate failure;
 #[macro_use]
@@ -52,7 +55,7 @@ impl Lox {
         let stmts = parser.parse()?;
 
         let mut resolver = Resolver::new(&mut self.inter);
-        resolver.resolve_stmts(&stmts)?;
+        resolver.resolve(&stmts)?;
 
         self.inter.interpret(&stmts)?;
 
@@ -110,7 +113,7 @@ impl Lox {
         let stmts = parser.parse()?;
 
         let mut resolver = Resolver::new(&mut self.inter);
-        resolver.resolve_stmts(&stmts)?;
+        resolver.resolve(&stmts)?;
 
         if stmts.len() == 1 {
             match stmts.first().unwrap() {

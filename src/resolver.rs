@@ -7,28 +7,41 @@ use std::collections::HashMap;
 pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
+    errors: Vec<ResolutionError>,
 }
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum ResolutionError {
-    #[fail(display = "[{}] Cannot read local variable in its own initializer", _0)]
     VarInInitalizer(Loc),
-    #[fail(display = "[{}] Variable '{}' already declared in this scope", _0, _1)]
     VarAlreadyInScope(Loc, String),
-    #[fail(
-        display = "[{}] Duplicate argument '{}' in function definition",
-        _0, _1
-    )]
     DuplicateArgumentName(Loc, String),
+    Multiple(Vec<ResolutionError>),
 }
 
-type ResolveRes = Result<(), ResolutionError>;
+type ResolveRes = Result<(), !>;
 
 impl<'a> Resolver<'a> {
     pub fn new(inter: &'a mut Interpreter) -> Self {
         Self {
             inter,
             scopes: Vec::new(),
+            errors: vec![],
+        }
+    }
+
+    pub fn resolve(&mut self, stmts: &[Stmt]) -> Result<(), ResolutionError> {
+        for stmt in stmts {
+            let Ok(()) = self.resolve_stmt(stmt);
+        }
+
+        match self.errors.len() {
+            0 => Ok(()),
+            1 => Err(self.errors.pop().unwrap()),
+            len => {
+                let mut errors = Vec::with_capacity(len);
+                errors.append(&mut self.errors);
+                Err(ResolutionError::Multiple(errors))
+            }
         }
     }
 
@@ -48,7 +61,7 @@ impl<'a> Resolver<'a> {
         stmt.accept(self)
     }
 
-    pub fn resolve_stmts(&mut self, stmts: &[Stmt]) -> ResolveRes {
+    fn resolve_stmts(&mut self, stmts: &[Stmt]) -> ResolveRes {
         for stmt in stmts {
             self.resolve_stmt(stmt)?;
         }
@@ -70,7 +83,8 @@ impl<'a> Resolver<'a> {
     {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(name) {
-                return Err(err_fn());
+                self.errors.push(err_fn());
+                return Ok(());
             }
             scope.insert(String::from(name), false);
         }
@@ -118,7 +132,7 @@ impl<'a> Resolver<'a> {
 }
 
 impl ExprVisitor<()> for Resolver<'_> {
-    type Error = ResolutionError;
+    type Error = !;
 
     fn visit_literal_expr(&mut self, _literal: &LitExpr, _loc: Loc) -> ResolveRes {
         Ok(())
@@ -172,7 +186,8 @@ impl ExprVisitor<()> for Resolver<'_> {
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> ResolveRes {
         if let Some(scope) = self.scopes.last() {
             if Some(&false) == scope.get(name) {
-                return Err(ResolutionError::VarInInitalizer(loc));
+                self.errors.push(ResolutionError::VarInInitalizer(loc));
+                return Ok(());
             }
         }
 
@@ -194,7 +209,7 @@ impl ExprVisitor<()> for Resolver<'_> {
 }
 
 impl StmtVisitor<()> for Resolver<'_> {
-    type Error = ResolutionError;
+    type Error = !;
 
     fn visit_expression_stmt(&mut self, expr: &Expr, _loc: Loc) -> ResolveRes {
         self.resolve_expr(expr)
