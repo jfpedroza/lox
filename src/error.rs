@@ -123,6 +123,7 @@ impl Display for ResolutionError {
                 loc, name
             ),
             ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
+            BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside a loop", loc),
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();

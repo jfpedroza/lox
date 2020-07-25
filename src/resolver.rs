@@ -8,6 +8,7 @@ pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     current_fun: FunctionType,
+    in_loop: bool,
     errors: Vec<ResolutionError>,
 }
 
@@ -23,6 +24,7 @@ pub enum ResolutionError {
     VarAlreadyInScope(Loc, String),
     DuplicateArgumentName(Loc, String),
     ReturnOutsideFun(Loc),
+    BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
 
@@ -34,6 +36,7 @@ impl<'a> Resolver<'a> {
             inter,
             scopes: Vec::new(),
             current_fun: FunctionType::None,
+            in_loop: false,
             errors: vec![],
         }
     }
@@ -133,7 +136,9 @@ impl<'a> Resolver<'a> {
         fun_type: FunctionType,
     ) -> ResolveRes {
         let enclosing_fun = self.current_fun;
+        let enclosing_loop = self.in_loop;
         self.current_fun = fun_type;
+        self.in_loop = false;
 
         self.begin_scope();
 
@@ -146,6 +151,7 @@ impl<'a> Resolver<'a> {
         self.end_scope();
 
         self.current_fun = enclosing_fun;
+        self.in_loop = enclosing_loop;
 
         Ok(())
     }
@@ -256,8 +262,12 @@ impl StmtVisitor<()> for Resolver<'_> {
     }
 
     fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ResolveRes {
+        let enclosing_loop = self.in_loop;
+        self.in_loop = true;
         self.resolve_expr(cond)?;
-        self.resolve_stmt(body)
+        self.resolve_stmt(body)?;
+        self.in_loop = enclosing_loop;
+        Ok(())
     }
 
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> ResolveRes {
@@ -303,7 +313,11 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_break_stmt(&mut self, _loc: Loc) -> ResolveRes {
+    fn visit_break_stmt(&mut self, loc: Loc) -> ResolveRes {
+        if !self.in_loop {
+            self.errors.push(ResolutionError::BreakOutsideLoop(loc));
+        }
+
         Ok(())
     }
 }
