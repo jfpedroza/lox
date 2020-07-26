@@ -35,6 +35,8 @@ use std::path::Path;
 use stmt::{Stmt, StmtKind};
 use value::Value;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 pub struct Lox {
     inter: Interpreter,
 }
@@ -83,7 +85,7 @@ impl Lox {
         let mut rl = Editor::<()>::new();
         rl.set_auto_add_history(true);
 
-        println!("Lox 0.0.4");
+        println!("Lox {}", VERSION);
         println!("Press Ctrl+D to exit\n");
 
         let prompt = format!("{}> ", Blue.bold().paint("lox"));
