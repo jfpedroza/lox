@@ -1,10 +1,16 @@
 use crate::eval::RuntimeError;
 use crate::lexer::ScanningError;
+use crate::location::Loc;
 use crate::parser::ParsingError;
 use crate::resolver::ResolutionError;
-use ansi_term::Color::Red;
+use ansi_term::Color::{Red, Yellow};
 use failure::{Error, Fail};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+
+#[derive(Debug, PartialEq)]
+pub enum Warning {
+    UnusedVariable(Loc, String),
+}
 
 pub fn print_err(err: &Error) {
     let mut fail = err.as_fail();
@@ -12,6 +18,16 @@ pub fn print_err(err: &Error) {
     while let Some(cause) = fail.cause() {
         eprintln!("> {}", cause);
         fail = cause;
+    }
+}
+
+fn print_warn(warn: &Warning) {
+    eprintln!("{}: {}", Yellow.bold().paint("Warning"), warn);
+}
+
+pub fn print_warns(warns: &[Warning]) {
+    for warn in warns {
+        print_warn(warn);
     }
 }
 
@@ -103,6 +119,32 @@ impl Display for ParsingError {
     }
 }
 
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use RuntimeError::*;
+        match self {
+            UnsupportedOperand(loc, op, val_type) => write!(
+                f,
+                "[{}] Unsupported operand for {}: '{}'",
+                loc, op, val_type
+            ),
+            UnsupportedOperands(loc, op, left_type, right_type) => write!(
+                f,
+                "[{}] Unsupported operands for {}: '{}' and '{}'",
+                loc, op, left_type, right_type
+            ),
+            DivisionByZero(loc) => write!(f, "[{}] Division or modulo by zero", loc),
+            UndefinedVariable(loc, name) => write!(f, "[{}] Undefined variable '{}'", loc, name),
+            NotACallable(loc, val_type) => write!(f, "[{}] '{}' is not callable", loc, val_type),
+            MismatchingArity(loc, expected, got) => write!(
+                f,
+                "[{}] Expected {} arguments but got {}",
+                loc, expected, got
+            ),
+        }
+    }
+}
+
 impl Display for ResolutionError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use ResolutionError::*;
@@ -129,6 +171,15 @@ impl Display for ResolutionError {
                     errors.iter().map(|error| format!("\n{}", error)).collect();
                 write!(f, "Multiple errors encountered{}", error_string)
             }
+        }
+    }
+}
+
+impl Display for Warning {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use Warning::*;
+        match self {
+            UnusedVariable(loc, name) => write!(f, "[{}] Unused variable '{}'", loc, name),
         }
     }
 }

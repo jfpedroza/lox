@@ -26,20 +26,11 @@ pub type Env = Rc<RefCell<Environ>>;
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
-    #[fail(display = "[{}] Unsupported operand for {}: '{}'", _0, _1, 2)]
     UnsupportedOperand(Loc, String, String),
-    #[fail(
-        display = "[{}] Unsupported operands for {}: '{}' and '{}'",
-        _0, _1, 2, _3
-    )]
     UnsupportedOperands(Loc, String, String, String),
-    #[fail(display = "[{}] Division or modulo by zero", _0)]
     DivisionByZero(Loc),
-    #[fail(display = "[{}] Undefined variable '{}'", _0, _1)]
     UndefinedVariable(Loc, String),
-    #[fail(display = "[{}] '{}' is not callable", _0, _1)]
     NotACallable(Loc, String),
-    #[fail(display = "[{}] Expected {} arguments but got {}", _0, _1, _2)]
     MismatchingArity(Loc, usize, usize),
 }
 

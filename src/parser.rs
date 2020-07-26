@@ -64,9 +64,9 @@ impl<'a> Parser<'a> {
         match self.errors.len() {
             0 => Ok(stmts),
             1 => Err(self.errors.pop().unwrap()),
-            len => {
-                let mut errors = Vec::with_capacity(len);
-                errors.append(&mut self.errors);
+            _ => {
+                let mut errors = Vec::new();
+                std::mem::swap(&mut self.errors, &mut errors);
                 Err(ParsingError::Multiple(errors))
             }
         }

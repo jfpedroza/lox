@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
@@ -9,10 +10,17 @@ use std::collections::HashMap;
 
 pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<HashMap<String, ResolvedVar>>,
     current_fun: FunctionType,
     in_loop: bool,
     errors: Vec<ResolutionError>,
+    pub warnings: Vec<Warning>,
+}
+
+struct ResolvedVar {
+    loc: Loc,
+    defined: bool,
+    used: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -41,6 +49,7 @@ impl<'a> Resolver<'a> {
             current_fun: FunctionType::None,
             in_loop: false,
             errors: vec![],
+            warnings: vec![],
         }
     }
 
@@ -52,9 +61,9 @@ impl<'a> Resolver<'a> {
         match self.errors.len() {
             0 => Ok(()),
             1 => Err(self.errors.pop().unwrap()),
-            len => {
-                let mut errors = Vec::with_capacity(len);
-                errors.append(&mut self.errors);
+            _ => {
+                let mut errors = Vec::new();
+                std::mem::swap(&mut self.errors, &mut errors);
                 Err(ResolutionError::Multiple(errors))
             }
         }
@@ -89,10 +98,19 @@ impl<'a> Resolver<'a> {
     }
 
     fn end_scope(&mut self) {
-        self.scopes.pop();
+        let scope = self
+            .scopes
+            .pop()
+            .expect("There should be a scope to end here");
+        for (name, resolved) in scope {
+            if !resolved.used {
+                self.warnings
+                    .push(Warning::UnusedVariable(resolved.loc, name));
+            }
+        }
     }
 
-    fn declare_name<F>(&mut self, name: &str, err_fn: F) -> ResolveRes
+    fn declare_name<F>(&mut self, name: &str, loc: Loc, err_fn: F) -> ResolveRes
     where
         F: FnOnce() -> ResolutionError,
     {
@@ -101,31 +119,40 @@ impl<'a> Resolver<'a> {
                 self.errors.push(err_fn());
                 return Ok(());
             }
-            scope.insert(String::from(name), false);
+            scope.insert(String::from(name), ResolvedVar::new(loc));
         }
 
         Ok(())
     }
 
     fn declare_var(&mut self, name: &str, loc: Loc) -> ResolveRes {
-        self.declare_name(name, || ResolutionError::var_already_in_scope(loc, name))
+        self.declare_name(name, loc, || {
+            ResolutionError::var_already_in_scope(loc, name)
+        })
     }
 
     fn declare_param(&mut self, name: &str, loc: Loc) -> ResolveRes {
-        self.declare_name(name, || ResolutionError::duplicate_arg_name(loc, name))
+        self.declare_name(name, loc, || ResolutionError::duplicate_arg_name(loc, name))
     }
 
     fn define(&mut self, name: &str) {
         if let Some(scope) = self.scopes.last_mut() {
-            scope.insert(String::from(name), true);
+            let resolved = scope
+                .get_mut(name)
+                .expect(&format!("Variable '{}' wasn't declared", name));
+            resolved.defined = true;
         }
     }
 
-    fn resolve_local(&mut self, name: &str, loc: Loc) {
+    fn resolve_local(&mut self, name: &str, loc: Loc, reading: bool) {
         if !self.scopes.is_empty() {
-            for i in (0..self.scopes.len()).rev() {
-                if self.scopes[i].contains_key(name) {
-                    self.inter.resolve(name, loc, self.scopes.len() - 1 - i);
+            let len = self.scopes.len();
+            for i in (0..len).rev() {
+                if let Some(resolved) = self.scopes[i].get_mut(name) {
+                    self.inter.resolve(name, loc, len - 1 - i);
+                    if reading {
+                        resolved.used = true;
+                    }
                     return;
                 }
             }
@@ -214,20 +241,20 @@ impl ExprVisitor<()> for Resolver<'_> {
 
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> ResolveRes {
         if let Some(scope) = self.scopes.last() {
-            if Some(&false) == scope.get(name) {
+            if let Some(ResolvedVar { defined: false, .. }) = scope.get(name) {
                 self.errors.push(ResolutionError::VarInInitalizer(loc));
                 return Ok(());
             }
         }
 
-        self.resolve_local(name, loc);
+        self.resolve_local(name, loc, true);
 
         Ok(())
     }
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ResolveRes {
         self.resolve_expr(expr)?;
-        self.resolve_local(name, loc);
+        self.resolve_local(name, loc, false);
         Ok(())
     }
 
@@ -322,6 +349,16 @@ impl StmtVisitor<()> for Resolver<'_> {
         }
 
         Ok(())
+    }
+}
+
+impl ResolvedVar {
+    pub fn new(loc: Loc) -> Self {
+        Self {
+            loc,
+            defined: false,
+            used: false,
+        }
     }
 }
 

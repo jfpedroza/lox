@@ -93,3 +93,10 @@ fn test_multiple() {
         resolve(input)
     )
 }
+
+#[test]
+fn test_unused_variable() {
+    let input = r#"{ var x = 5; }"#;
+    assert_eq!(Ok(()), resolve(input));
+    // TODO: Actually check if the warning was emitted
+}

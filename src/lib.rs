@@ -59,6 +59,8 @@ impl Lox {
         let mut resolver = Resolver::new(&mut self.inter);
         resolver.resolve(&stmts)?;
 
+        error::print_warns(&resolver.warnings);
+
         self.inter.interpret(&stmts)?;
 
         Ok(())
@@ -116,6 +118,8 @@ impl Lox {
 
         let mut resolver = Resolver::new(&mut self.inter);
         resolver.resolve(&stmts)?;
+
+        error::print_warns(&resolver.warnings);
 
         if stmts.len() == 1 {
             match stmts.first().unwrap() {
