@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;

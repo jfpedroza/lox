@@ -3,7 +3,7 @@ use crate::expr::{BinOp, Expr, ExprKind, LitExpr, LogOp, UnOp};
 use crate::lexer::{Scanner, Token};
 use crate::location::Loc;
 use crate::parser::Parser;
-use crate::resolver::Resolver;
+use crate::resolver::{ResolutionError, Resolver};
 use crate::stmt::Stmt;
 
 pub fn get_tokens<'a>(input: &'a str) -> Vec<Token<'a>> {
@@ -15,6 +15,16 @@ pub fn get_expr(input: &str) -> Expr {
     let tokens = get_tokens(input);
     let mut parser = Parser::new(&tokens);
     parser.expression().unwrap()
+}
+
+pub fn resolve(input: &str) -> Result<(), ResolutionError> {
+    let tokens = get_tokens(input);
+    let mut parser = Parser::new(&tokens);
+    let stmts = parser.parse().unwrap();
+
+    let mut inter = Interpreter::new();
+    let mut resolver = Resolver::new(&mut inter);
+    resolver.resolve(&stmts)
 }
 
 pub fn get_stmts(input: &str) -> (Vec<Stmt>, Interpreter) {
