@@ -143,7 +143,7 @@ impl Environ {
         let mut env: *const Environ = self;
 
         for _ in 0..distance {
-            if let Some(ref enclosing) = self.enclosing {
+            if let Some(enclosing) = unsafe { (*env).enclosing.as_ref() } {
                 env = enclosing.as_ptr();
             } else {
                 panic!("Ancestor not found at distance {}", distance);
@@ -177,7 +177,7 @@ impl Environ {
         let mut env: *mut Environ = self;
 
         for _ in 0..distance {
-            if let Some(ref enclosing) = self.enclosing {
+            if let Some(enclosing) = unsafe { (*env).enclosing.as_ref() } {
                 env = enclosing.as_ptr();
             } else {
                 panic!("Ancestor not found at distance {}", distance);

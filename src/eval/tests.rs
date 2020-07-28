@@ -635,6 +635,16 @@ fn test_anon_function() {
 }
 
 #[test]
+fn test_local_resolution() {
+    let input = r#" var global_x;
+    {var x = 1; {{{{{ x = 3; { global_x = x; }}}}}}}
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "global_x"));
+}
+
+#[test]
 fn test_undefined_variable() {
     let input = r#"hello;"#;
     let (stmts, mut inter) = get_stmts(input);
