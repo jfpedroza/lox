@@ -1,4 +1,4 @@
-use crate::expr::Expr;
+use crate::expr::{Expr, Param};
 use crate::location::{Loc, Located};
 
 #[derive(PartialEq, Debug, Clone)]
@@ -9,7 +9,7 @@ pub enum StmtKind {
     While(Expr, Box<Stmt>),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
-    Function(String, Vec<String>, Vec<Stmt>),
+    Function(String, Vec<Param>, Vec<Stmt>),
     Return(Option<Expr>),
     Break,
 }
@@ -41,7 +41,7 @@ pub trait Visitor<Res> {
     fn visit_function_stmt(
         &mut self,
         name: &str,
-        params: &[String],
+        params: &[Param],
         body: &[Stmt],
         loc: Loc,
     ) -> Self::Result;
@@ -79,7 +79,7 @@ impl Stmt {
         Stmt::new(StmtKind::Block(stmts), loc)
     }
 
-    pub fn function(name: &str, params: Vec<String>, body: Vec<Stmt>, loc: Loc) -> Self {
+    pub fn function(name: &str, params: Vec<Param>, body: Vec<Stmt>, loc: Loc) -> Self {
         Stmt::new(StmtKind::Function(String::from(name), params, body), loc)
     }
 

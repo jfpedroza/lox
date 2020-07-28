@@ -1,9 +1,16 @@
 use crate::eval::RuntimeError;
 use crate::lexer::ScanningError;
+use crate::location::Loc;
 use crate::parser::ParsingError;
-use ansi_term::Color::Red;
-use failure::Error;
+use crate::resolver::ResolutionError;
+use ansi_term::Color::{Red, Yellow};
+use failure::{Error, Fail};
 use std::fmt::{Display, Formatter, Result as FmtResult};
+
+#[derive(Debug, PartialEq)]
+pub enum Warning {
+    UnusedVariable(Loc, String),
+}
 
 pub fn print_err(err: &Error) {
     let mut fail = err.as_fail();
@@ -14,11 +21,28 @@ pub fn print_err(err: &Error) {
     }
 }
 
+fn print_warn(warn: &Warning) {
+    eprintln!("{}: {}", Yellow.bold().paint("Warning"), warn);
+}
+
+pub fn print_warns(warns: &[Warning]) {
+    for warn in warns {
+        print_warn(warn);
+    }
+}
+
+fn is_type<T: Fail>(err: &Error) -> bool {
+    err.downcast_ref::<T>().is_some()
+}
+
+fn is_syntax_err(err: &Error) -> bool {
+    is_type::<ScanningError>(err) || is_type::<ParsingError>(err) || is_type::<ResolutionError>(err)
+}
+
 fn error_type(err: &Error) -> &'static str {
-    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
-    {
+    if is_syntax_err(err) {
         "SyntaxError"
-    } else if err.downcast_ref::<RuntimeError>().is_some() {
+    } else if is_type::<RuntimeError>(err) {
         "RuntimeError"
     } else {
         "Error"
@@ -26,10 +50,9 @@ fn error_type(err: &Error) -> &'static str {
 }
 
 pub fn exit_code(err: &Error) -> i32 {
-    if err.downcast_ref::<ScanningError>().is_some() || err.downcast_ref::<ParsingError>().is_some()
-    {
+    if is_syntax_err(err) {
         65
-    } else if err.downcast_ref::<RuntimeError>().is_some() {
+    } else if is_type::<RuntimeError>(err) {
         70
     } else {
         1
@@ -92,6 +115,71 @@ impl Display for ParsingError {
                     errors.iter().map(|error| format!("\n{}", error)).collect();
                 write!(f, "Multiple errors encountered{}", error_string)
             }
+        }
+    }
+}
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use RuntimeError::*;
+        match self {
+            UnsupportedOperand(loc, op, val_type) => write!(
+                f,
+                "[{}] Unsupported operand for {}: '{}'",
+                loc, op, val_type
+            ),
+            UnsupportedOperands(loc, op, left_type, right_type) => write!(
+                f,
+                "[{}] Unsupported operands for {}: '{}' and '{}'",
+                loc, op, left_type, right_type
+            ),
+            DivisionByZero(loc) => write!(f, "[{}] Division or modulo by zero", loc),
+            UndefinedVariable(loc, name) => write!(f, "[{}] Undefined variable '{}'", loc, name),
+            NotACallable(loc, val_type) => write!(f, "[{}] '{}' is not callable", loc, val_type),
+            MismatchingArity(loc, expected, got) => write!(
+                f,
+                "[{}] Expected {} arguments but got {}",
+                loc, expected, got
+            ),
+        }
+    }
+}
+
+impl Display for ResolutionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use ResolutionError::*;
+        match self {
+            VarInInitalizer(loc) => write!(
+                f,
+                "[{}] Cannot read local variable in its own initializer",
+                loc
+            ),
+            VarAlreadyInScope(loc, name) => write!(
+                f,
+                "[{}] Variable '{}' already declared in this scope",
+                loc, name
+            ),
+            DuplicateArgumentName(loc, name) => write!(
+                f,
+                "[{}] Duplicate argument '{}' in function definition",
+                loc, name
+            ),
+            ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
+            BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside a loop", loc),
+            Multiple(errors) => {
+                let error_string: String =
+                    errors.iter().map(|error| format!("\n{}", error)).collect();
+                write!(f, "Multiple errors encountered{}", error_string)
+            }
+        }
+    }
+}
+
+impl Display for Warning {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        use Warning::*;
+        match self {
+            UnusedVariable(loc, name) => write!(f, "[{}] Unused variable '{}'", loc, name),
         }
     }
 }

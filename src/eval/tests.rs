@@ -318,8 +318,7 @@ fn test_logical_short_circuit() {
         ("false or (hello = false)", Boolean(false)),
     ] {
         let input = format!(r#"var hello = "world"; {};"#, input);
-        let stmts = get_stmts(&input);
-        let mut inter = Interpreter::new();
+        let (stmts, mut inter) = get_stmts(&input);
         assert_eq!(Ok(()), inter.interpret(&stmts));
         assert_eq!(Ok(output), env_get(&inter, "hello"));
     }
@@ -373,16 +372,14 @@ fn test_division_by_zero() {
 #[test]
 fn test_empty_stmt() {
     let input = "";
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
 }
 
 #[test]
 fn test_var_stmt() {
     let input = r#"var hello = "world";"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
 }
@@ -392,8 +389,7 @@ fn test_var_assignment() {
     let input = r#"var hello = "world";
     hello = 1 + 1;
     hello = "Earth";"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
@@ -411,8 +407,7 @@ fn test_var_assignment2() {
     var l = k--;
     var m = j++;
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(2.into()), env_get(&inter, "i"));
     assert_eq!(Ok(4.into()), env_get(&inter, "j"));
@@ -428,8 +423,7 @@ fn test_var_assignment_in_block() {
         1 + 1; // This does nothing
         hello = "Earth";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
@@ -441,8 +435,7 @@ fn test_var_shadowing() {
         var hello = "Earth";
         hello = "planet";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
 }
@@ -453,8 +446,7 @@ fn test_if_stmt_true() {
     if (3 > 2) {
         hello = "world";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
 }
@@ -465,8 +457,7 @@ fn test_if_stmt_false() {
     if (3 < 2) {
         hello = "world";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(Nil), env_get(&inter, "hello"));
 }
@@ -479,8 +470,7 @@ fn test_if_else_stmt_true() {
     } else {
         hello = "Earth";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("world".into()), env_get(&inter, "hello"));
 }
@@ -493,8 +483,7 @@ fn test_if_else_stmt_false() {
     } else {
         hello = "Earth";
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Earth".into()), env_get(&inter, "hello"));
 }
@@ -503,8 +492,7 @@ fn test_if_else_stmt_false() {
 fn test_var_print() {
     let input = r#"var hello = "world";
     print hello;"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
 }
 
@@ -514,8 +502,7 @@ fn test_while_stmt() {
     while (i < 10) {
         i += 1;
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(10.into()), env_get(&inter, "i"));
 }
@@ -524,8 +511,7 @@ fn test_while_stmt() {
 fn test_for_stmt() {
     let input = r#"var i;
     for (i = 0; i < 10; ++i) {}"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(10.into()), env_get(&inter, "i"));
 }
@@ -536,8 +522,7 @@ fn test_for_break_stmt() {
     for (i = 10; ; --i) {
         if (i == 0) break;
     }"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(0.into()), env_get(&inter, "i"));
 }
@@ -547,8 +532,7 @@ fn test_function_stmt() {
     let input = r#"
     fun my_fun() {}
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     let fun = env_get(&inter, "my_fun").unwrap();
     match fun {
@@ -565,8 +549,7 @@ fn test_function_call() {
     fun salute(name) { return "Hello, " + name; }
     var salutation = salute("World!");
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Hello, World!".into()), env_get(&inter, "salutation"));
 }
@@ -577,8 +560,7 @@ fn test_function_call_native() {
     var time = clock();
     var age = str(23);
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert!(matches!(env_get(&inter, "time").unwrap(), Integer(_)));
     assert_eq!(Ok("23".into()), env_get(&inter, "age"));
@@ -598,8 +580,7 @@ fn test_local_function() {
     var inner = outer();
     var res = inner();
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Inner!".into()), env_get(&inter, "res"));
 }
@@ -630,8 +611,7 @@ fn test_closures() {
     global_set();
     var after = global_get();
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("initial".into()), env_get(&inter, "before"));
     assert_eq!(Ok("updated".into()), env_get(&inter, "after"));
@@ -649,17 +629,25 @@ fn test_anon_function() {
     var inner = outer();
     var res = inner();
     "#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok("Inner!".into()), env_get(&inter, "res"));
 }
 
 #[test]
+fn test_local_resolution() {
+    let input = r#" var global_x;
+    {var x = 1; {{{{{ x = 3; { global_x = x; }}}}}}}
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "global_x"));
+}
+
+#[test]
 fn test_undefined_variable() {
     let input = r#"hello;"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::UndefinedVariable(
             Loc::new(0, 0),
@@ -672,8 +660,7 @@ fn test_undefined_variable() {
 #[test]
 fn test_undefined_variable_in_assignment() {
     let input = r#"hello = "world";"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::UndefinedVariable(
             Loc::new(0, 0),
@@ -686,8 +673,7 @@ fn test_undefined_variable_in_assignment() {
 #[test]
 fn test_not_a_callable() {
     let input = r#""world"();"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::NotACallable(
             Loc::new(0, 8),
@@ -700,8 +686,7 @@ fn test_not_a_callable() {
 #[test]
 fn test_too_few_arguments() {
     let input = r#"str();"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::MismatchingArity(Loc::new(0, 4), 1, 0)),
         inter.interpret(&stmts)
@@ -711,8 +696,7 @@ fn test_too_few_arguments() {
 #[test]
 fn test_too_many_arguments() {
     let input = r#"clock(1);"#;
-    let stmts = get_stmts(input);
-    let mut inter = Interpreter::new();
+    let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::MismatchingArity(Loc::new(0, 7), 0, 1)),
         inter.interpret(&stmts)

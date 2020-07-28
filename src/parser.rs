@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::expr::{BinOp, Expr, ExprKind};
+use crate::expr::{BinOp, Expr, ExprKind, Param};
 use crate::lexer::{
     Token,
     TokenKind::{self, *},
@@ -64,9 +64,9 @@ impl<'a> Parser<'a> {
         match self.errors.len() {
             0 => Ok(stmts),
             1 => Err(self.errors.pop().unwrap()),
-            len => {
-                let mut errors = Vec::with_capacity(len);
-                errors.append(&mut self.errors);
+            _ => {
+                let mut errors = Vec::new();
+                std::mem::swap(&mut self.errors, &mut errors);
                 Err(ParsingError::Multiple(errors))
             }
         }
@@ -296,7 +296,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::function(name.lexeme, params, body, name.loc))
     }
 
-    fn function_params(&mut self, open_paren_after: &str) -> Result<Vec<String>, ParsingError> {
+    fn function_params(&mut self, open_paren_after: &str) -> Result<Vec<Param>, ParsingError> {
         self.consume(LeftParen, |p| p.expected_open_paren_error(open_paren_after))?;
 
         let mut params = Vec::new();
@@ -317,7 +317,7 @@ impl<'a> Parser<'a> {
 
         let params = params
             .iter()
-            .map(|param| String::from(param.lexeme))
+            .map(|param| Param::new(String::from(param.lexeme), param.loc))
             .collect();
         Ok(params)
     }
