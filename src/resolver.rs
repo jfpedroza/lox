@@ -19,6 +19,7 @@ pub struct Resolver<'a> {
 
 struct ResolvedVar {
     loc: Loc,
+    index: usize,
     defined: bool,
     used: bool,
 }
@@ -119,7 +120,7 @@ impl<'a> Resolver<'a> {
                 self.errors.push(err_fn());
                 return Ok(());
             }
-            scope.insert(String::from(name), ResolvedVar::new(loc));
+            scope.insert(String::from(name), ResolvedVar::new(loc, scope.len()));
         }
 
         Ok(())
@@ -149,7 +150,7 @@ impl<'a> Resolver<'a> {
             let len = self.scopes.len();
             for i in (0..len).rev() {
                 if let Some(resolved) = self.scopes[i].get_mut(name) {
-                    self.inter.resolve(name, loc, len - 1 - i);
+                    self.inter.resolve(name, loc, len - 1 - i, resolved.index);
                     if reading {
                         resolved.used = true;
                     }
@@ -353,9 +354,10 @@ impl StmtVisitor<()> for Resolver<'_> {
 }
 
 impl ResolvedVar {
-    pub fn new(loc: Loc) -> Self {
+    pub fn new(loc: Loc, index: usize) -> Self {
         Self {
             loc,
+            index,
             defined: false,
             used: false,
         }

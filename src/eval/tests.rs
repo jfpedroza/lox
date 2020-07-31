@@ -4,7 +4,7 @@ use crate::test_utils::*;
 use crate::value::{types::*, Value::*};
 
 pub fn env_get(inter: &Interpreter, name: &str) -> ValueRes {
-    inter.env.borrow().get(name, Loc::default())
+    inter.globals.borrow().get(name, Loc::default())
 }
 
 fn test_value_res(input: &str, expected: ValueRes) {
@@ -642,6 +642,34 @@ fn test_local_resolution() {
     let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(3.into()), env_get(&inter, "global_x"));
+}
+
+#[test]
+fn test_locals() {
+    let input = r#"
+    var global_x;
+    var global_y;
+    var global_z;
+    
+    {
+        var x = 5;
+        var y = true;
+        {
+            var x = 3;
+            var z = "string";
+            
+            global_x = x;
+        }
+
+        global_y = y;
+        global_z = x;
+    }
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "global_x"));
+    assert_eq!(Ok(true.into()), env_get(&inter, "global_y"));
+    assert_eq!(Ok(5.into()), env_get(&inter, "global_z"));
 }
 
 #[test]
