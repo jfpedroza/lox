@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::callable::{populate_natives, Function, LoxCallable};
-use crate::expr::{BinOp, Expr, LitExpr, LogOp, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
 use crate::value::Value;
@@ -11,34 +11,38 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 pub struct Interpreter {
-    env: Env,
-    pub globals: Env,
+    env: Option<Env>,
+    pub globals: GlobalEnv,
+    locals: HashMap<(String, Loc), ResolvedLocal>,
+}
+
+#[derive(Debug)]
+pub struct GlobalEnviron {
+    values: HashMap<String, Value>,
 }
 
 #[derive(Debug)]
 pub struct Environ {
-    values: HashMap<String, Value>,
+    values: Vec<Value>,
     enclosing: Option<Env>,
 }
 
 pub type Env = Rc<RefCell<Environ>>;
+pub type GlobalEnv = Rc<RefCell<GlobalEnviron>>;
+
+#[derive(Copy, Clone)]
+struct ResolvedLocal {
+    depth: usize,
+    index: usize,
+}
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
-    #[fail(display = "[{}] Unsupported operand for {}: '{}'", _0, _1, 2)]
     UnsupportedOperand(Loc, String, String),
-    #[fail(
-        display = "[{}] Unsupported operands for {}: '{}' and '{}'",
-        _0, _1, 2, _3
-    )]
     UnsupportedOperands(Loc, String, String, String),
-    #[fail(display = "[{}] Division or modulo by zero", _0)]
     DivisionByZero(Loc),
-    #[fail(display = "[{}] Undefined variable '{}'", _0, _1)]
     UndefinedVariable(Loc, String),
-    #[fail(display = "[{}] '{}' is not callable", _0, _1)]
     NotACallable(Loc, String),
-    #[fail(display = "[{}] Expected {} arguments but got {}", _0, _1, _2)]
     MismatchingArity(Loc, usize, usize),
 }
 
@@ -54,10 +58,11 @@ type ExecuteRes = Result<(), RuntimeInterrupt>;
 
 impl Interpreter {
     pub fn new() -> Self {
-        let globals = Environ::new().into();
+        let globals = GlobalEnviron::new().into();
         let mut inter = Interpreter {
-            env: Rc::clone(&globals),
+            env: None,
             globals,
+            locals: HashMap::new(),
         };
 
         populate_natives(&mut inter);
@@ -81,8 +86,8 @@ impl Interpreter {
     }
 
     pub fn execute_block(&mut self, stmts: &[Stmt], env: Env) -> ExecuteRes {
-        let prev = Rc::clone(&self.env);
-        self.env = env;
+        let prev = self.env.as_ref().map(Rc::clone);
+        self.env = Some(env);
 
         for stmt in stmts {
             match self.execute(stmt) {
@@ -97,23 +102,47 @@ impl Interpreter {
         self.env = prev;
         Ok(())
     }
-}
 
-impl Environ {
-    pub fn new() -> Self {
-        Environ {
-            values: HashMap::new(),
-            enclosing: None,
+    pub fn resolve(&mut self, name: &str, loc: Loc, depth: usize, index: usize) {
+        self.locals
+            .insert((String::from(name), loc), ResolvedLocal::new(depth, index));
+    }
+
+    fn get_resolved_local(&self, name: &str, loc: Loc) -> Option<ResolvedLocal> {
+        self.locals.get(&(name.to_string(), loc)).cloned()
+    }
+
+    fn look_up_variable(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
+        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
+            Ok(self.local_env().borrow().get_at(depth, index))
+        } else {
+            self.globals.borrow().get(name, loc)
         }
     }
 
-    pub fn with_enclosing(enclosing: &Env) -> Env {
-        let env = Environ {
-            values: HashMap::new(),
-            enclosing: Some(Rc::clone(enclosing)),
-        };
+    fn local_env(&self) -> Env {
+        let env = self
+            .env
+            .as_ref()
+            .expect("Expected a local environment to be set");
 
-        env.into()
+        Rc::clone(env)
+    }
+
+    fn define(&mut self, name: &str, val: Value) {
+        if let Some(env) = &self.env {
+            env.borrow_mut().define(val);
+        } else {
+            self.globals.borrow_mut().define(name, val);
+        }
+    }
+}
+
+impl GlobalEnviron {
+    pub fn new() -> Self {
+        GlobalEnviron {
+            values: HashMap::new(),
+        }
     }
 
     pub fn define(&mut self, name: &str, val: Value) {
@@ -123,8 +152,6 @@ impl Environ {
     pub fn get(&self, name: &str, loc: Loc) -> Result<Value, RuntimeError> {
         if let Some(val) = self.values.get(name) {
             Ok(val.clone())
-        } else if let Some(ref env) = self.enclosing {
-            env.borrow().get(name, loc)
         } else {
             Err(RuntimeError::undefined_variable(loc, name))
         }
@@ -135,17 +162,78 @@ impl Environ {
             self.values.insert(String::from(name), val);
 
             Ok(())
-        } else if let Some(ref env) = self.enclosing {
-            env.borrow_mut().assign(name, val, loc)
         } else {
             Err(RuntimeError::undefined_variable(loc, &name))
         }
     }
 }
 
+impl Environ {
+    pub fn with_enclosing(enclosing: &Option<Env>) -> Env {
+        let env = Environ {
+            values: Vec::new(),
+            enclosing: enclosing.as_ref().map(Rc::clone),
+        };
+
+        env.into()
+    }
+
+    pub fn define(&mut self, val: Value) {
+        self.values.push(val);
+    }
+
+    fn ancestor(&self, distance: usize) -> &Environ {
+        let mut env: *const Environ = self;
+
+        for _ in 0..distance {
+            if let Some(enclosing) = unsafe { (*env).enclosing.as_ref() } {
+                env = enclosing.as_ptr();
+            } else {
+                panic!("Ancestor not found at distance {}", distance);
+            }
+        }
+
+        unsafe { &*env }
+    }
+
+    fn get_at(&self, distance: usize, index: usize) -> Value {
+        self.ancestor(distance).values[index].clone()
+    }
+
+    fn ancestor_mut(&mut self, distance: usize) -> &mut Environ {
+        let mut env: *mut Environ = self;
+
+        for _ in 0..distance {
+            if let Some(enclosing) = unsafe { (*env).enclosing.as_ref() } {
+                env = enclosing.as_ptr();
+            } else {
+                panic!("Ancestor not found at distance {}", distance);
+            }
+        }
+
+        unsafe { &mut *env }
+    }
+
+    fn assign_at(&mut self, distance: usize, index: usize, val: Value) {
+        self.ancestor_mut(distance).values[index] = val;
+    }
+}
+
+impl Into<GlobalEnv> for GlobalEnviron {
+    fn into(self) -> GlobalEnv {
+        Rc::new(RefCell::new(self))
+    }
+}
+
 impl Into<Env> for Environ {
     fn into(self) -> Env {
         Rc::new(RefCell::new(self))
+    }
+}
+
+impl ResolvedLocal {
+    pub fn new(depth: usize, index: usize) -> Self {
+        Self { depth, index }
     }
 }
 
@@ -156,7 +244,8 @@ impl ExprVisitor<Value> for Interpreter {
         Ok(literal.into())
     }
 
-    fn visit_function_expr(&mut self, params: &[String], body: &[Stmt], _loc: Loc) -> ValueRes {
+    fn visit_function_expr(&mut self, params: &[Param], body: &[Stmt], _loc: Loc) -> ValueRes {
+        let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
         let function = Function::new_anon(params, body, &self.env);
         Ok(function.into())
     }
@@ -218,13 +307,19 @@ impl ExprVisitor<Value> for Interpreter {
     }
 
     fn visit_variable_expr(&mut self, name: &str, loc: Loc) -> ValueRes {
-        self.env.borrow().get(&name, loc)
+        self.look_up_variable(name, loc)
     }
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
         let val = self.evaluate(expr)?;
         let cloned_val = val.clone();
-        self.env.borrow_mut().assign(name, val, loc)?;
+
+        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
+            self.local_env().borrow_mut().assign_at(depth, index, val);
+        } else {
+            self.globals.borrow_mut().assign(name, val, loc)?;
+        }
+
         Ok(cloned_val)
     }
 
@@ -303,7 +398,7 @@ impl StmtVisitor<()> for Interpreter {
             Value::Nil
         };
 
-        self.env.borrow_mut().define(name, init_val);
+        self.define(name, init_val);
         Ok(())
     }
 
@@ -314,12 +409,13 @@ impl StmtVisitor<()> for Interpreter {
     fn visit_function_stmt(
         &mut self,
         name: &str,
-        params: &[String],
+        params: &[Param],
         body: &[Stmt],
         _loc: Loc,
     ) -> ExecuteRes {
+        let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
         let function = Function::new(name, params, body, &self.env);
-        self.env.borrow_mut().define(name, function.into());
+        self.define(name, function.into());
         Ok(())
     }
 

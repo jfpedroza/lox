@@ -1,4 +1,7 @@
 #![feature(associated_type_defaults)]
+#![feature(never_type)]
+#![feature(exhaustive_patterns)]
+#![allow(clippy::diverging_sub_expression)]
 
 extern crate failure;
 #[macro_use]
@@ -11,6 +14,7 @@ mod expr;
 mod lexer;
 mod location;
 mod parser;
+mod resolver;
 mod stmt;
 #[cfg(test)]
 mod test_utils;
@@ -23,12 +27,15 @@ use eval::Interpreter;
 use failure::{Fallible, ResultExt};
 use lexer::Scanner;
 use parser::Parser;
+use resolver::Resolver;
 use rustyline::{config::Configurer, error::ReadlineError, Editor};
 use std::ffi::OsStr;
 use std::io::{stdin, Read};
 use std::path::Path;
 use stmt::{Stmt, StmtKind};
 use value::Value;
+
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 pub struct Lox {
     inter: Interpreter,
@@ -48,6 +55,11 @@ impl Lox {
 
         let mut parser = Parser::new(&tokens);
         let stmts = parser.parse()?;
+
+        let mut resolver = Resolver::new(&mut self.inter);
+        resolver.resolve(&stmts)?;
+
+        error::print_warns(&resolver.warnings);
 
         self.inter.interpret(&stmts)?;
 
@@ -75,7 +87,7 @@ impl Lox {
         let mut rl = Editor::<()>::new();
         rl.set_auto_add_history(true);
 
-        println!("Lox 0.0.4");
+        println!("Lox {}", VERSION);
         println!("Press Ctrl+D to exit\n");
 
         let prompt = format!("{}> ", Blue.bold().paint("lox"));
@@ -103,6 +115,11 @@ impl Lox {
         let mut parser = Parser::new(&tokens);
         parser.allow_expression = true;
         let stmts = parser.parse()?;
+
+        let mut resolver = Resolver::new(&mut self.inter);
+        resolver.resolve(&stmts)?;
+
+        error::print_warns(&resolver.warnings);
 
         if stmts.len() == 1 {
             match stmts.first().unwrap() {

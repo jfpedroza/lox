@@ -1,4 +1,4 @@
-use crate::eval::{Env, Environ, Interpreter, RuntimeInterrupt, ValueRes};
+use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::stmt::Stmt;
 use crate::value::Value;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -22,7 +22,7 @@ pub struct Function {
     pub name: Option<String>,
     params: Vec<String>,
     body: Vec<Stmt>,
-    closure: Env,
+    closure: Option<Env>,
 }
 
 pub mod types {
@@ -125,21 +125,21 @@ impl From<NativeFunction> for Callable {
 }
 
 impl Function {
-    pub fn new(name: &str, params: &[String], body: &[Stmt], closure: &Env) -> Self {
+    pub fn new(name: &str, params: Vec<String>, body: &[Stmt], closure: &Option<Env>) -> Self {
         Self {
             name: Some(String::from(name)),
-            params: params.to_vec(),
+            params,
             body: body.to_vec(),
-            closure: Rc::clone(closure),
+            closure: closure.as_ref().map(Rc::clone),
         }
     }
 
-    pub fn new_anon(params: &[String], body: &[Stmt], closure: &Env) -> Self {
+    pub fn new_anon(params: Vec<String>, body: &[Stmt], closure: &Option<Env>) -> Self {
         Self {
             name: None,
-            params: params.to_vec(),
+            params,
             body: body.to_vec(),
-            closure: Rc::clone(closure),
+            closure: closure.as_ref().map(Rc::clone),
         }
     }
 }
@@ -151,8 +151,8 @@ impl LoxCallable for Function {
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
         let env = Environ::with_enclosing(&self.closure);
-        for (i, arg) in args.into_iter().enumerate() {
-            env.borrow_mut().define(&self.params[i], arg);
+        for arg in args.into_iter() {
+            env.borrow_mut().define(arg);
         }
 
         match inter.execute_block(&self.body, env) {
@@ -165,8 +165,8 @@ impl LoxCallable for Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self.name.as_ref() {
-            Some(name) => write!(f, "<fn {}>", name),
+        match self.name {
+            Some(ref name) => write!(f, "<fn {}>", name),
             None => write!(f, "<anonymous fn>"),
         }
     }
@@ -184,7 +184,7 @@ pub fn populate_natives(inter: &mut Interpreter) {
     define_native(&mut globals, NativeFunction::Str);
 }
 
-fn define_native(globals: &mut Environ, function: NativeFunction) {
+fn define_native(globals: &mut GlobalEnviron, function: NativeFunction) {
     globals.define(function.name(), function.into());
 }
 
