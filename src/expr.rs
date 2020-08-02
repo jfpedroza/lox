@@ -16,6 +16,7 @@ pub enum ExprKind {
     Variable(String),
     Assign(String, Box<Expr>),
     Call(Box<Expr>, Vec<Expr>),
+    Get(Box<Expr>, String),
 }
 
 pub type Expr = Located<ExprKind>;
@@ -59,6 +60,8 @@ pub trait Visitor<Res> {
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
 
     fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> Self::Result;
+
+    fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> Self::Result;
 }
 
 impl Expr {
@@ -128,6 +131,10 @@ impl Expr {
         Expr::new(ExprKind::Call(Box::new(callee), args), loc)
     }
 
+    pub fn get(obj: Expr, name: &str, loc: Loc) -> Self {
+        Expr::new(ExprKind::Get(Box::new(obj), String::from(name)), loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -145,6 +152,7 @@ impl Expr {
             Variable(name) => visitor.visit_variable_expr(name, self.loc),
             Assign(name, expr) => visitor.visit_assign_expr(name, expr, self.loc),
             Call(callee, args) => visitor.visit_call_expr(callee, args, self.loc),
+            Get(obj, name) => visitor.visit_get_expr(obj, name, self.loc),
         }
     }
 }
@@ -170,6 +178,7 @@ impl Debug for ExprKind {
             Variable(name) => format!("(var {})", name),
             Assign(name, expr) => format!("(= {} {:?})", name, expr),
             Call(callee, args) => format!("(call {:?} {:?})", callee, args),
+            Get(obj, name) => format!("(get {:?} {})", obj, name),
         };
 
         write!(f, "{}", string)

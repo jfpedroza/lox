@@ -44,7 +44,7 @@ multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
 unary          → ( "!" | "-" | "++" | "--" ) unary
                | postfix ;
 postfix        → primary ( "++" | "--" )
-               | primary ( "(" arguments? ")" )* ;
+               | primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER

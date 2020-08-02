@@ -507,8 +507,15 @@ impl<'a> Parser<'a> {
             Ok(Expr::comma(left, right, left_loc))
         } else {
             let mut expr = left;
-            while self.matches(&[LeftParen]).is_some() {
-                expr = self.finish_call(expr)?;
+            loop {
+                expr = if self.matches(&[LeftParen]).is_some() {
+                    self.finish_call(expr)?
+                } else if self.matches(&[Dot]).is_some() {
+                    let name = self.consume(Identifier, |p| p.expected_name_error("property"))?;
+                    Expr::get(expr, name.lexeme, name.loc)
+                } else {
+                    break;
+                }
             }
 
             Ok(expr)

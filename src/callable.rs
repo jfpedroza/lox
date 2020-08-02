@@ -1,6 +1,7 @@
 use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::stmt::Stmt;
 use crate::value::Value;
+use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -34,6 +35,7 @@ pub struct Class {
 #[derive(Debug)]
 pub struct ClassInstance {
     class: Rc<Class>,
+    fields: HashMap<String, Value>,
 }
 
 pub mod types {
@@ -236,7 +238,12 @@ impl ClassInstance {
     pub fn new(class: &Rc<Class>) -> Self {
         Self {
             class: Rc::clone(class),
+            fields: HashMap::new(),
         }
+    }
+
+    pub fn get(&self, name: &str) -> Option<Value> {
+        self.fields.get(name).cloned()
     }
 }
 

@@ -135,12 +135,18 @@ impl Display for RuntimeError {
             ),
             DivisionByZero(loc) => write!(f, "[{}] Division or modulo by zero", loc),
             UndefinedVariable(loc, name) => write!(f, "[{}] Undefined variable '{}'", loc, name),
-            NotACallable(loc, val_type) => write!(f, "[{}] '{}' is not callable", loc, val_type),
+            NotACallable(loc, val_type) => {
+                write!(f, "[{}] Type '{}' is not callable", loc, val_type)
+            }
             MismatchingArity(loc, expected, got) => write!(
                 f,
                 "[{}] Expected {} arguments but got {}",
                 loc, expected, got
             ),
+            NoProperties(loc, val_type) => {
+                write!(f, "[{}] Type '{}' doesn't have properties", loc, val_type)
+            }
+            UndefinedProperty(loc, name) => write!(f, "[{}] Undefined property '{}'", loc, name),
         }
     }
 }

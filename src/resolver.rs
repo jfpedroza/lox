@@ -263,6 +263,10 @@ impl ExprVisitor<()> for Resolver<'_> {
         self.resolve_expr(callee)?;
         self.resolve_exprs(args)
     }
+
+    fn visit_get_expr(&mut self, obj: &Expr, _name: &str, _loc: Loc) -> ResolveRes {
+        self.resolve_expr(obj)
+    }
 }
 
 impl StmtVisitor<()> for Resolver<'_> {

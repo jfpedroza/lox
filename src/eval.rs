@@ -44,6 +44,8 @@ pub enum RuntimeError {
     UndefinedVariable(Loc, String),
     NotACallable(Loc, String),
     MismatchingArity(Loc, usize, usize),
+    NoProperties(Loc, String),
+    UndefinedProperty(Loc, String),
 }
 
 #[derive(Debug)]
@@ -348,6 +350,18 @@ impl ExprVisitor<Value> for Interpreter {
             Err(RuntimeError::not_a_callable(loc, callee))
         }
     }
+
+    fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        if let Value::Instance(instance) = obj {
+            instance
+                .borrow()
+                .get(name)
+                .ok_or_else(|| RuntimeError::undefined_property(loc, name))
+        } else {
+            Err(RuntimeError::no_properties(loc, obj))
+        }
+    }
 }
 
 impl StmtVisitor<()> for Interpreter {
@@ -594,6 +608,14 @@ impl RuntimeError {
 
     fn mismatching_arity(loc: Loc, expected: usize, got: usize) -> Self {
         Self::MismatchingArity(loc, expected, got)
+    }
+
+    fn no_properties(loc: Loc, val: Value) -> Self {
+        Self::NoProperties(loc, String::from(val.get_type()))
+    }
+
+    fn undefined_property(loc: Loc, name: &str) -> Self {
+        Self::UndefinedProperty(loc, String::from(name))
     }
 }
 
