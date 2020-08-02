@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum Callable {
     Native(NativeFunction),
     Function(Rc<Function>),
+    Class(Rc<Class>),
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -17,7 +18,7 @@ pub enum NativeFunction {
     Str,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Function {
     pub name: Option<String>,
     params: Vec<String>,
@@ -25,9 +26,20 @@ pub struct Function {
     closure: Option<Env>,
 }
 
+#[derive(Debug)]
+pub struct Class {
+    name: String,
+}
+
+#[derive(Debug)]
+pub struct ClassInstance {
+    class: Rc<Class>,
+}
+
 pub mod types {
     pub const NATIVE: &str = "native_fn";
     pub const FUNCTION: &str = "function";
+    pub const CLASS: &str = "class";
 }
 
 pub trait LoxCallable: Into<Callable> {
@@ -41,6 +53,7 @@ impl Callable {
         match self {
             Native(_) => types::NATIVE,
             Function(_) => types::FUNCTION,
+            Class(_) => types::CLASS,
         }
     }
 }
@@ -51,6 +64,7 @@ impl Display for Callable {
         match self {
             Native(function) => Display::fmt(function, f),
             Function(function) => Display::fmt(function, f),
+            Class(class) => Display::fmt(class, f),
         }
     }
 }
@@ -61,6 +75,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.arity(),
             Function(function) => function.arity(),
+            Class(class) => class.arity(),
         }
     }
 
@@ -69,6 +84,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.call(inter, args),
             Function(function) => function.call(inter, args),
+            Class(class) => class.call(inter, args),
         }
     }
 }
@@ -79,6 +95,7 @@ impl PartialEq for Callable {
         match (self, other) {
             (Native(left), Native(right)) => left == right,
             (Function(left), Function(right)) => Rc::ptr_eq(left, right),
+            (Class(left), Class(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         }
     }
@@ -175,6 +192,57 @@ impl Display for Function {
 impl From<Function> for Callable {
     fn from(function: Function) -> Self {
         Callable::Function(Rc::new(function))
+    }
+}
+
+impl Class {
+    pub fn new(name: &str) -> Self {
+        Self {
+            name: String::from(name),
+        }
+    }
+}
+
+impl LoxCallable for Rc<Class> {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(&self, _inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
+        let instance = ClassInstance::new(self);
+        Ok(instance.into())
+    }
+}
+
+impl Display for Class {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "<class {}>", self.name)
+    }
+}
+
+impl From<Class> for Callable {
+    fn from(class: Class) -> Self {
+        Callable::Class(Rc::new(class))
+    }
+}
+
+impl From<Rc<Class>> for Callable {
+    fn from(class: Rc<Class>) -> Self {
+        Callable::Class(class)
+    }
+}
+
+impl ClassInstance {
+    pub fn new(class: &Rc<Class>) -> Self {
+        Self {
+            class: Rc::clone(class),
+        }
+    }
+}
+
+impl Display for ClassInstance {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "<instance of {}>", self.class.name)
     }
 }
 

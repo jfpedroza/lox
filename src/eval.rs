@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_natives, Function, LoxCallable};
+use crate::callable::{populate_natives, Class, Function, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
@@ -135,6 +135,16 @@ impl Interpreter {
         } else {
             self.globals.borrow_mut().define(name, val);
         }
+    }
+
+    fn assign(&mut self, name: &str, val: Value, loc: Loc) -> Result<(), RuntimeError> {
+        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
+            self.local_env().borrow_mut().assign_at(depth, index, val);
+        } else {
+            self.globals.borrow_mut().assign(name, val, loc)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -312,15 +322,9 @@ impl ExprVisitor<Value> for Interpreter {
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
         let val = self.evaluate(expr)?;
-        let cloned_val = val.clone();
+        self.assign(name, val.clone(), loc)?;
 
-        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
-            self.local_env().borrow_mut().assign_at(depth, index, val);
-        } else {
-            self.globals.borrow_mut().assign(name, val, loc)?;
-        }
-
-        Ok(cloned_val)
+        Ok(val)
     }
 
     fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> ValueRes {
@@ -429,6 +433,13 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
+    fn visit_class_stmt(&mut self, name: &str, _methods: &[Stmt], loc: Loc) -> ExecuteRes {
+        self.define(name, Value::Nil);
+        let class = Class::new(name);
+        self.assign(name, Value::Callable(class.into()), loc)?;
+        Ok(())
+    }
+
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
         Err(RuntimeInterrupt::Break)
     }
@@ -533,6 +544,7 @@ impl Value {
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
+            (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         })
     }

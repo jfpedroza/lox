@@ -92,8 +92,8 @@ impl Display for ParsingError {
             ExpectedOpenBrace(loc, before, got) => {
                 write!(f, "[{}] Expected '{{' before {}. Got {}", loc, before, got)
             }
-            ExpectedCloseBrace(loc, got) => {
-                write!(f, "[{}] Expected '}}' after block. Got {}", loc, got)
+            ExpectedCloseBrace(loc, after, got) => {
+                write!(f, "[{}] Expected '}}' after {}. Got {}", loc, after, got)
             }
             ExpectedColon(loc, got) => write!(
                 f,

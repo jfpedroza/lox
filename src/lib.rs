@@ -35,7 +35,7 @@ use std::path::Path;
 use stmt::{Stmt, StmtKind};
 use value::Value;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub struct Lox {
     inter: Interpreter,
@@ -137,6 +137,7 @@ impl Lox {
                         Value::Boolean(boolean) => Purple.paint(boolean.to_string()),
                         Value::Nil => Purple.paint("nil"),
                         Value::Callable(callable) => Yellow.paint(callable.to_string()),
+                        Value::Instance(instance) => Yellow.paint(instance.borrow().to_string()),
                     };
                     println!("=> {}", output);
                 }

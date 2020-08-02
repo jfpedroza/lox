@@ -637,6 +637,7 @@ fn test_missing_brace_paren() {
     assert_eq!(
         Err(ParsingError::ExpectedCloseBrace(
             Loc::new(0, 5),
+            String::from("block"),
             String::from("EOF")
         )),
         parser.parse()

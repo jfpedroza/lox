@@ -140,7 +140,7 @@ impl<'a> Resolver<'a> {
         if let Some(scope) = self.scopes.last_mut() {
             let resolved = scope
                 .get_mut(name)
-                .expect(&format!("Variable '{}' wasn't declared", name));
+                .unwrap_or_else(|| panic!("Variable '{}' wasn't declared", name));
             resolved.defined = true;
         }
     }
@@ -340,6 +340,13 @@ impl StmtVisitor<()> for Resolver<'_> {
         if let Some(ret_expr) = ret {
             self.resolve_expr(ret_expr)?;
         }
+
+        Ok(())
+    }
+
+    fn visit_class_stmt(&mut self, name: &str, _methods: &[Stmt], loc: Loc) -> ResolveRes {
+        self.declare_var(name, loc)?;
+        self.define(name);
 
         Ok(())
     }

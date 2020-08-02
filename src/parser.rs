@@ -23,7 +23,7 @@ pub enum ParsingError {
     ExpectedOpenParen(Loc, String, String),
     ExpectedCloseParen(Loc, String, String),
     ExpectedOpenBrace(Loc, String, String),
-    ExpectedCloseBrace(Loc, String),
+    ExpectedCloseBrace(Loc, String, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
     ExpectedName(Loc, String, String),
@@ -131,6 +131,8 @@ impl<'a> Parser<'a> {
         } else if self.check(Fun) && self.check_next(Identifier) {
             self.advance();
             self.function("function")
+        } else if self.matches(&[Class]).is_some() {
+            self.class_declaration()
         } else {
             self.statement()
         };
@@ -250,7 +252,7 @@ impl<'a> Parser<'a> {
             stmts.push(self.declaration()?);
         }
 
-        self.consume(RightBrace, Self::expected_close_brace_error)?;
+        self.consume(RightBrace, |p| p.expected_close_brace_error("block"))?;
 
         Ok(stmts)
     }
@@ -320,6 +322,21 @@ impl<'a> Parser<'a> {
             .map(|param| Param::new(String::from(param.lexeme), param.loc))
             .collect();
         Ok(params)
+    }
+
+    fn class_declaration(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        let name = self.consume(Identifier, |p| p.expected_name_error("class"))?;
+
+        self.consume(LeftBrace, |p| p.expected_open_brace_error("class body"))?;
+        let mut methods = Vec::new();
+        while !self.check(RightBrace) && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+
+        self.consume(RightBrace, |p| p.expected_close_brace_error("class body"))?;
+
+        Ok(Stmt::class(name.lexeme, methods, *loc))
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {
@@ -590,9 +607,9 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedOpenBrace(token.loc, String::from(before), token.lexeme.to_string())
     }
 
-    fn expected_close_brace_error(&self) -> ParsingError {
+    fn expected_close_brace_error(&self, after: &str) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedCloseBrace(token.loc, token.lexeme.to_string())
+        ParsingError::ExpectedCloseBrace(token.loc, String::from(after), token.lexeme.to_string())
     }
 
     fn expected_expression_error(&self) -> ParsingError {
