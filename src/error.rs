@@ -147,6 +147,9 @@ impl Display for RuntimeError {
                 write!(f, "[{}] Type '{}' doesn't have properties", loc, val_type)
             }
             UndefinedProperty(loc, name) => write!(f, "[{}] Undefined property '{}'", loc, name),
+            NoFields(loc, val_type) => {
+                write!(f, "[{}] Type '{}' doesn't have fields", loc, val_type)
+            }
         }
     }
 }

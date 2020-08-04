@@ -267,6 +267,11 @@ impl ExprVisitor<()> for Resolver<'_> {
     fn visit_get_expr(&mut self, obj: &Expr, _name: &str, _loc: Loc) -> ResolveRes {
         self.resolve_expr(obj)
     }
+
+    fn visit_set_expr(&mut self, obj: &Expr, _name: &str, expr: &Expr, _loc: Loc) -> ResolveRes {
+        self.resolve_expr(expr)?;
+        self.resolve_expr(obj)
+    }
 }
 
 impl StmtVisitor<()> for Resolver<'_> {

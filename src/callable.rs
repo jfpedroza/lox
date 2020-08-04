@@ -245,6 +245,10 @@ impl ClassInstance {
     pub fn get(&self, name: &str) -> Option<Value> {
         self.fields.get(name).cloned()
     }
+
+    pub fn set(&mut self, name: &str, val: Value) {
+        self.fields.insert(String::from(name), val);
+    }
 }
 
 impl Display for ClassInstance {
@@ -253,10 +257,11 @@ impl Display for ClassInstance {
     }
 }
 
-pub fn populate_natives(inter: &mut Interpreter) {
+pub fn populate_globals(inter: &mut Interpreter) {
     let mut globals = inter.globals.borrow_mut();
     define_native(&mut globals, NativeFunction::Clock);
     define_native(&mut globals, NativeFunction::Str);
+    define_class(&mut globals, make_map_class());
 }
 
 fn define_native(globals: &mut GlobalEnviron, function: NativeFunction) {
@@ -276,4 +281,15 @@ fn clock(_inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
 fn val_to_str(_inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
     let value = args.first().unwrap();
     Ok(value.to_string().into())
+}
+
+fn define_class(globals: &mut GlobalEnviron, class: Class) {
+    let name = class.name.clone();
+    globals.define(&name, Rc::new(class).into());
+}
+
+fn make_map_class() -> Class {
+    Class {
+        name: String::from("Map"),
+    }
 }

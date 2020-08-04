@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_natives, Class, Function, LoxCallable};
+use crate::callable::{populate_globals, Class, Function, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, Visitor as StmtVisitor};
@@ -46,6 +46,7 @@ pub enum RuntimeError {
     MismatchingArity(Loc, usize, usize),
     NoProperties(Loc, String),
     UndefinedProperty(Loc, String),
+    NoFields(Loc, String),
 }
 
 #[derive(Debug)]
@@ -67,7 +68,7 @@ impl Interpreter {
             locals: HashMap::new(),
         };
 
-        populate_natives(&mut inter);
+        populate_globals(&mut inter);
         inter
     }
 
@@ -362,6 +363,17 @@ impl ExprVisitor<Value> for Interpreter {
             Err(RuntimeError::no_properties(loc, obj))
         }
     }
+
+    fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        if let Value::Instance(instance) = obj {
+            let val = self.evaluate(expr)?;
+            instance.borrow_mut().set(name, val.clone());
+            Ok(val)
+        } else {
+            Err(RuntimeError::no_fields(loc, obj))
+        }
+    }
 }
 
 impl StmtVisitor<()> for Interpreter {
@@ -616,6 +628,10 @@ impl RuntimeError {
 
     fn undefined_property(loc: Loc, name: &str) -> Self {
         Self::UndefinedProperty(loc, String::from(name))
+    }
+
+    fn no_fields(loc: Loc, val: Value) -> Self {
+        Self::NoFields(loc, String::from(val.get_type()))
     }
 }
 

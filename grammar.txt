@@ -32,7 +32,7 @@ block          → "{" declaration* "}" ;
 returnStmt     → "return" expression? ";" ;
 
 expression     → assignment ( "," expression )? ;
-assignment     → IDENTIFIER assignment_op assignment
+assignment     → ( call "." )? IDENTIFIER assignment_op assignment
                | conditional ;
 conditional    → logic_or ( "?" expression : conditional )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
@@ -43,8 +43,9 @@ addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
 multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
 unary          → ( "!" | "-" | "++" | "--" ) unary
                | postfix ;
-postfix        → primary ( "++" | "--" )
-               | primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
+postfix        → ( call "." )? IDENTIFIER ( "++" | "--" )
+               | call
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER
