@@ -30,7 +30,10 @@ pub struct Function {
 #[derive(Debug)]
 pub struct Class {
     name: String,
+    methods: HashMap<String, Method>,
 }
+
+type Method = Rc<Function>;
 
 #[derive(Debug)]
 pub struct ClassInstance {
@@ -198,10 +201,16 @@ impl From<Function> for Callable {
 }
 
 impl Class {
-    pub fn new(name: &str) -> Self {
+    pub fn new(name: &str, methods: HashMap<String, Function>) -> Self {
+        let methods = methods.into_iter().map(|(k, v)| (k, Rc::new(v))).collect();
         Self {
             name: String::from(name),
+            methods,
         }
+    }
+
+    fn find_method(&self, name: &str) -> Option<Method> {
+        self.methods.get(name).map(Rc::clone)
     }
 }
 
@@ -243,7 +252,11 @@ impl ClassInstance {
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        self.fields.get(name).cloned()
+        self.fields.get(name).cloned().or_else(|| {
+            self.class
+                .find_method(name)
+                .map(|m| Callable::Function(m).into())
+        })
     }
 
     pub fn set(&mut self, name: &str, val: Value) {
@@ -291,5 +304,6 @@ fn define_class(globals: &mut GlobalEnviron, class: Class) {
 fn make_map_class() -> Class {
     Class {
         name: String::from("Map"),
+        methods: HashMap::new(),
     }
 }

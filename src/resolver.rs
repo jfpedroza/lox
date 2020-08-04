@@ -5,7 +5,7 @@ use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, Visitor as StmtVisitor};
+use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
 use std::collections::HashMap;
 
 pub struct Resolver<'a> {
@@ -28,6 +28,7 @@ struct ResolvedVar {
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -353,9 +354,19 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(&mut self, name: &str, _methods: &[Stmt], loc: Loc) -> ResolveRes {
+    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
         self.declare_var(name, loc)?;
         self.define(name);
+
+        for method in methods {
+            let declaration = FunctionType::Method;
+            match &method.kind {
+                StmtKind::Function(_name, params, body) => {
+                    self.resolve_function(params, body, declaration)?;
+                }
+                _ => unreachable!(),
+            }
+        }
 
         Ok(())
     }

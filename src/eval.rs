@@ -4,7 +4,7 @@ mod tests;
 use crate::callable::{populate_globals, Class, Function, LoxCallable};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, Visitor as StmtVisitor};
+use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -459,9 +459,22 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
-    fn visit_class_stmt(&mut self, name: &str, _methods: &[Stmt], loc: Loc) -> ExecuteRes {
+    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ExecuteRes {
         self.define(name, Value::Nil);
-        let class = Class::new(name);
+
+        let methods: HashMap<_, _> = methods
+            .iter()
+            .map(|stmt| match &stmt.kind {
+                StmtKind::Function(name, params, body) => {
+                    let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
+                    let method = Function::new(name, params, body, &self.env);
+                    (name.clone(), method)
+                }
+                _ => unreachable!(),
+            })
+            .collect();
+
+        let class = Class::new(name, methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
