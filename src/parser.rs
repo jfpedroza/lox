@@ -580,7 +580,7 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> ExprParseRes {
         let primary_tokens = [
-            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, Fun,
+            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, This, Fun,
         ];
         let token = self
             .matches(&primary_tokens)
@@ -600,6 +600,7 @@ impl<'a> Parser<'a> {
                 Expr::grouping(expr, token.loc)
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
+            This => Expr::this(token.loc),
             Fun => self.anon_function()?,
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
         })

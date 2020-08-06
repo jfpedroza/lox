@@ -18,6 +18,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
+    This,
 }
 
 pub type Expr = Located<ExprKind>;
@@ -65,6 +66,8 @@ pub trait Visitor<Res> {
     fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> Self::Result;
 
     fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_this_expr(&mut self, loc: Loc) -> Self::Result;
 }
 
 impl Expr {
@@ -142,6 +145,10 @@ impl Expr {
         Expr::new(ExprKind::Set(obj, name, Box::new(expr)), loc)
     }
 
+    pub fn this(loc: Loc) -> Self {
+        Expr::new(ExprKind::This, loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -161,6 +168,7 @@ impl Expr {
             Call(callee, args) => visitor.visit_call_expr(callee, args, self.loc),
             Get(obj, name) => visitor.visit_get_expr(obj, name, self.loc),
             Set(obj, name, expr) => visitor.visit_set_expr(obj, name, expr, self.loc),
+            This => visitor.visit_this_expr(self.loc),
         }
     }
 }
@@ -188,6 +196,7 @@ impl Debug for ExprKind {
             Call(callee, args) => format!("(call {:?} {:?})", callee, args),
             Get(obj, name) => format!("(get {:?} {})", obj, name),
             Set(obj, name, expr) => format!("(set {:?} {} {:?})", obj, name, expr),
+            This => String::from("this"),
         };
 
         write!(f, "{}", string)

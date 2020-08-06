@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_globals, Class, Function, LoxCallable};
+use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
+use crate::constants::THIS_KEYWORD;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
@@ -355,9 +356,7 @@ impl ExprVisitor<Value> for Interpreter {
     fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> ValueRes {
         let obj = self.evaluate(obj)?;
         if let Value::Instance(instance) = obj {
-            instance
-                .borrow()
-                .get(name)
+            ClassInstance::get(&instance, name)
                 .ok_or_else(|| RuntimeError::undefined_property(loc, name))
         } else {
             Err(RuntimeError::no_properties(loc, obj))
@@ -373,6 +372,10 @@ impl ExprVisitor<Value> for Interpreter {
         } else {
             Err(RuntimeError::no_fields(loc, obj))
         }
+    }
+
+    fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
+        self.look_up_variable(THIS_KEYWORD, loc)
     }
 }
 

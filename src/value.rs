@@ -1,4 +1,4 @@
-use crate::callable::{Callable, ClassInstance, LoxCallable};
+use crate::callable::{Callable, ClassInstance, InstanceRc, LoxCallable};
 use crate::expr::LitExpr;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -12,7 +12,7 @@ pub enum Value {
     Boolean(bool),
     Nil,
     Callable(Callable),
-    Instance(Rc<RefCell<ClassInstance>>),
+    Instance(InstanceRc),
 }
 
 pub mod types {

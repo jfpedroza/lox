@@ -49,6 +49,7 @@ call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER
+               | "this"
                | anonymous_fun
                | "(" expression ")"
 

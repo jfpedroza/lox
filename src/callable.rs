@@ -1,6 +1,7 @@
 use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::stmt::Stmt;
 use crate::value::Value;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
@@ -10,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum Callable {
     Native(NativeFunction),
     Function(Rc<Function>),
+    BoundFunction(BoundFunction),
     Class(Rc<Class>),
 }
 
@@ -27,6 +29,12 @@ pub struct Function {
     closure: Option<Env>,
 }
 
+#[derive(Clone, Debug)]
+pub struct BoundFunction {
+    function: Rc<Function>,
+    instance: InstanceRc,
+}
+
 #[derive(Debug)]
 pub struct Class {
     name: String,
@@ -40,6 +48,8 @@ pub struct ClassInstance {
     class: Rc<Class>,
     fields: HashMap<String, Value>,
 }
+
+pub type InstanceRc = Rc<RefCell<ClassInstance>>;
 
 pub mod types {
     pub const NATIVE: &str = "native_fn";
@@ -58,6 +68,7 @@ impl Callable {
         match self {
             Native(_) => types::NATIVE,
             Function(_) => types::FUNCTION,
+            BoundFunction(_) => types::FUNCTION,
             Class(_) => types::CLASS,
         }
     }
@@ -69,6 +80,7 @@ impl Display for Callable {
         match self {
             Native(function) => Display::fmt(function, f),
             Function(function) => Display::fmt(function, f),
+            BoundFunction(function) => Display::fmt(function, f),
             Class(class) => Display::fmt(class, f),
         }
     }
@@ -80,6 +92,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.arity(),
             Function(function) => function.arity(),
+            BoundFunction(function) => function.arity(),
             Class(class) => class.arity(),
         }
     }
@@ -89,6 +102,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.call(inter, args),
             Function(function) => function.call(inter, args),
+            BoundFunction(function) => function.call(inter, args),
             Class(class) => class.call(inter, args),
         }
     }
@@ -100,6 +114,7 @@ impl PartialEq for Callable {
         match (self, other) {
             (Native(left), Native(right)) => left == right,
             (Function(left), Function(right)) => Rc::ptr_eq(left, right),
+            (BoundFunction(left), BoundFunction(right)) => left == right,
             (Class(left), Class(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         }
@@ -164,15 +179,14 @@ impl Function {
             closure: closure.as_ref().map(Rc::clone),
         }
     }
-}
 
-impl LoxCallable for Function {
-    fn arity(&self) -> usize {
-        self.params.len()
-    }
-
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
-        let env = Environ::with_enclosing(&self.closure);
+    fn call_with_closure(
+        &self,
+        inter: &mut Interpreter,
+        args: Vec<Value>,
+        closure: &Option<Env>,
+    ) -> ValueRes {
+        let env = Environ::with_enclosing(closure);
         for arg in args.into_iter() {
             env.borrow_mut().define(arg);
         }
@@ -182,6 +196,20 @@ impl LoxCallable for Function {
             Err(RuntimeInterrupt::Return(ret)) => Ok(ret),
             Err(error) => Err(error.expect_error()),
         }
+    }
+
+    fn bind(fun: Rc<Function>, instance: &InstanceRc) -> Callable {
+        Callable::BoundFunction(BoundFunction::new(fun, instance))
+    }
+}
+
+impl LoxCallable for Function {
+    fn arity(&self) -> usize {
+        self.params.len()
+    }
+
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+        self.call_with_closure(inter, args, &self.closure)
     }
 }
 
@@ -197,6 +225,48 @@ impl Display for Function {
 impl From<Function> for Callable {
     fn from(function: Function) -> Self {
         Callable::Function(Rc::new(function))
+    }
+}
+
+impl BoundFunction {
+    pub fn new(fun: Rc<Function>, instance: &InstanceRc) -> Self {
+        Self {
+            function: fun,
+            instance: Rc::clone(instance),
+        }
+    }
+}
+
+impl LoxCallable for BoundFunction {
+    fn arity(&self) -> usize {
+        self.function.arity()
+    }
+
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+        let env = Environ::with_enclosing(&self.function.closure);
+        let this_val = Value::Instance(Rc::clone(&self.instance));
+        env.borrow_mut().define(this_val);
+        self.function.call_with_closure(inter, args, &Some(env))
+    }
+}
+
+impl Display for BoundFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let method_name = self.function.name.as_ref().unwrap();
+        let class_name = &self.instance.borrow().class.name;
+        write!(f, "<method {} of class {}>", method_name, class_name)
+    }
+}
+
+impl PartialEq for BoundFunction {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.function, &other.function) && Rc::ptr_eq(&self.instance, &other.instance)
+    }
+}
+
+impl From<BoundFunction> for Callable {
+    fn from(function: BoundFunction) -> Self {
+        Callable::BoundFunction(function)
     }
 }
 
@@ -251,11 +321,13 @@ impl ClassInstance {
         }
     }
 
-    pub fn get(&self, name: &str) -> Option<Value> {
-        self.fields.get(name).cloned().or_else(|| {
-            self.class
+    pub fn get(instance: &InstanceRc, name: &str) -> Option<Value> {
+        instance.borrow().fields.get(name).cloned().or_else(|| {
+            instance
+                .borrow()
+                .class
                 .find_method(name)
-                .map(|m| Callable::Function(m).into())
+                .map(|m| Function::bind(m, instance).into())
         })
     }
 

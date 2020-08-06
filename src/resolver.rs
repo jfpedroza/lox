@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::constants::THIS_KEYWORD;
 use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
@@ -146,6 +147,19 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn declare_define_this(&mut self, loc: Loc) {
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            String::from(THIS_KEYWORD),
+            ResolvedVar {
+                loc,
+                index: scope.len(),
+                defined: true,
+                used: true,
+            },
+        );
+    }
+
     fn resolve_local(&mut self, name: &str, loc: Loc, reading: bool) {
         if !self.scopes.is_empty() {
             let len = self.scopes.len();
@@ -273,6 +287,11 @@ impl ExprVisitor<()> for Resolver<'_> {
         self.resolve_expr(expr)?;
         self.resolve_expr(obj)
     }
+
+    fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {
+        self.resolve_local(THIS_KEYWORD, loc, true);
+        Ok(())
+    }
 }
 
 impl StmtVisitor<()> for Resolver<'_> {
@@ -358,6 +377,9 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.declare_var(name, loc)?;
         self.define(name);
 
+        self.begin_scope();
+        self.declare_define_this(loc);
+
         for method in methods {
             let declaration = FunctionType::Method;
             match &method.kind {
@@ -367,6 +389,8 @@ impl StmtVisitor<()> for Resolver<'_> {
                 _ => unreachable!(),
             }
         }
+
+        self.end_scope();
 
         Ok(())
     }
