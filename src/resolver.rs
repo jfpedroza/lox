@@ -13,6 +13,7 @@ pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, ResolvedVar>>,
     current_fun: FunctionType,
+    current_class: ClassType,
     in_loop: bool,
     errors: Vec<ResolutionError>,
     pub warnings: Vec<Warning>,
@@ -32,12 +33,19 @@ enum FunctionType {
     Method,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum ClassType {
+    None,
+    Class,
+}
+
 #[derive(Debug, PartialEq, Fail)]
 pub enum ResolutionError {
     VarInInitalizer(Loc),
     VarAlreadyInScope(Loc, String),
     DuplicateArgumentName(Loc, String),
     ReturnOutsideFun(Loc),
+    ThisOutsideClass(Loc),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -50,6 +58,7 @@ impl<'a> Resolver<'a> {
             inter,
             scopes: Vec::new(),
             current_fun: FunctionType::None,
+            current_class: ClassType::None,
             in_loop: false,
             errors: vec![],
             warnings: vec![],
@@ -289,7 +298,12 @@ impl ExprVisitor<()> for Resolver<'_> {
     }
 
     fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {
-        self.resolve_local(THIS_KEYWORD, loc, true);
+        if self.current_class == ClassType::None {
+            self.errors.push(ResolutionError::ThisOutsideClass(loc));
+        } else {
+            self.resolve_local(THIS_KEYWORD, loc, true);
+        }
+
         Ok(())
     }
 }
@@ -374,6 +388,9 @@ impl StmtVisitor<()> for Resolver<'_> {
     }
 
     fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
+        let enclosing_class = self.current_class;
+        self.current_class = ClassType::Class;
+
         self.declare_var(name, loc)?;
         self.define(name);
 
@@ -391,6 +408,8 @@ impl StmtVisitor<()> for Resolver<'_> {
         }
 
         self.end_scope();
+
+        self.current_class = enclosing_class;
 
         Ok(())
     }
