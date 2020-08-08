@@ -4,7 +4,7 @@ use crate::stmt::Stmt;
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub enum Callable {
     Native(NativeFunction),
     Function(Rc<Function>),
-    BoundFunction(BoundFunction),
+    BoundMethod(BoundMethod),
     Class(Rc<Class>),
 }
 
@@ -31,9 +31,21 @@ pub struct Function {
     is_init: bool,
 }
 
+pub struct NativeMethod {
+    name: &'static str,
+    arity: usize,
+    fun: fn(&mut Interpreter, Vec<Value>, &mut ClassInstance) -> ValueRes,
+}
+
 #[derive(Clone, Debug)]
-pub struct BoundFunction {
-    function: Rc<Function>,
+pub enum Method {
+    Native(Rc<NativeMethod>),
+    Function(Rc<Function>),
+}
+
+#[derive(Clone, Debug)]
+pub struct BoundMethod {
+    method: Method,
     instance: InstanceRc,
 }
 
@@ -42,8 +54,6 @@ pub struct Class {
     name: String,
     methods: HashMap<String, Method>,
 }
-
-type Method = Rc<Function>;
 
 #[derive(Debug)]
 pub struct ClassInstance {
@@ -70,7 +80,7 @@ impl Callable {
         match self {
             Native(_) => types::NATIVE,
             Function(_) => types::FUNCTION,
-            BoundFunction(_) => types::FUNCTION,
+            BoundMethod(_) => types::FUNCTION,
             Class(_) => types::CLASS,
         }
     }
@@ -82,7 +92,7 @@ impl Display for Callable {
         match self {
             Native(function) => Display::fmt(function, f),
             Function(function) => Display::fmt(function, f),
-            BoundFunction(function) => Display::fmt(function, f),
+            BoundMethod(method) => Display::fmt(method, f),
             Class(class) => Display::fmt(class, f),
         }
     }
@@ -94,7 +104,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.arity(),
             Function(function) => function.arity(),
-            BoundFunction(function) => function.arity(),
+            BoundMethod(method) => method.arity(),
             Class(class) => class.arity(),
         }
     }
@@ -104,7 +114,7 @@ impl LoxCallable for Callable {
         match self {
             Native(function) => function.call(inter, args),
             Function(function) => function.call(inter, args),
-            BoundFunction(function) => function.call(inter, args),
+            BoundMethod(method) => method.call(inter, args),
             Class(class) => class.call(inter, args),
         }
     }
@@ -116,7 +126,7 @@ impl PartialEq for Callable {
         match (self, other) {
             (Native(left), Native(right)) => left == right,
             (Function(left), Function(right)) => Rc::ptr_eq(left, right),
-            (BoundFunction(left), BoundFunction(right)) => left == right,
+            (BoundMethod(left), BoundMethod(right)) => left == right,
             (Class(left), Class(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         }
@@ -219,10 +229,6 @@ impl Function {
     fn get_this(&self, closure: &Option<Env>) -> Value {
         closure.as_ref().unwrap().borrow().get_at(0, 0)
     }
-
-    fn bind(fun: Rc<Function>, instance: &InstanceRc) -> Callable {
-        Callable::BoundFunction(BoundFunction::new(fun, instance))
-    }
 }
 
 impl LoxCallable for Function {
@@ -250,59 +256,118 @@ impl From<Function> for Callable {
     }
 }
 
-impl BoundFunction {
-    pub fn new(fun: Rc<Function>, instance: &InstanceRc) -> Self {
+impl Debug for NativeMethod {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "<native method {}>", self.name)
+    }
+}
+
+impl Method {
+    pub fn arity(&self) -> usize {
+        match self {
+            Method::Native(native) => native.arity,
+            Method::Function(function) => function.arity(),
+        }
+    }
+
+    pub fn bind(method: Method, instance: &InstanceRc) -> Callable {
+        Callable::BoundMethod(BoundMethod::new(method, instance))
+    }
+}
+
+impl PartialEq for Method {
+    fn eq(&self, other: &Self) -> bool {
+        use Method::*;
+        match (self, other) {
+            (Native(left), Native(right)) => Rc::ptr_eq(left, right),
+            (Function(left), Function(right)) => Rc::ptr_eq(left, right),
+            (_, _) => false,
+        }
+    }
+}
+
+impl From<NativeMethod> for Method {
+    fn from(native: NativeMethod) -> Self {
+        Method::Native(Rc::new(native))
+    }
+}
+
+impl From<Function> for Method {
+    fn from(function: Function) -> Self {
+        Method::Function(Rc::new(function))
+    }
+}
+
+impl BoundMethod {
+    pub fn new(method: Method, instance: &InstanceRc) -> Self {
         Self {
-            function: fun,
+            method: method,
             instance: Rc::clone(instance),
         }
     }
 }
 
-impl LoxCallable for BoundFunction {
+impl LoxCallable for BoundMethod {
     fn arity(&self) -> usize {
-        self.function.arity()
+        self.method.arity()
     }
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
-        let env = Environ::with_enclosing(&self.function.closure);
-        let this_val = Value::Instance(Rc::clone(&self.instance));
-        env.borrow_mut().define(this_val);
-        self.function.call_with_closure(inter, args, &Some(env))
+        match &self.method {
+            Method::Native(native) => {
+                let fun = native.fun;
+                fun(inter, args, &mut self.instance.borrow_mut())
+            }
+            Method::Function(function) => {
+                let env = Environ::with_enclosing(&function.closure);
+                let this_val = Value::Instance(Rc::clone(&self.instance));
+                env.borrow_mut().define(this_val);
+                function.call_with_closure(inter, args, &Some(env))
+            }
+        }
     }
 }
 
-impl Display for BoundFunction {
+impl Display for BoundMethod {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let method_name = self.function.name.as_ref().unwrap();
+        let method_name = match &self.method {
+            Method::Native(native) => native.name,
+            Method::Function(function) => function.name.as_ref().unwrap(),
+        };
+
         let class_name = &self.instance.borrow().class.name;
         write!(f, "<method {} of class {}>", method_name, class_name)
     }
 }
 
-impl PartialEq for BoundFunction {
+impl PartialEq for BoundMethod {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.function, &other.function) && Rc::ptr_eq(&self.instance, &other.instance)
+        self.method == other.method && Rc::ptr_eq(&self.instance, &other.instance)
     }
 }
 
-impl From<BoundFunction> for Callable {
-    fn from(function: BoundFunction) -> Self {
-        Callable::BoundFunction(function)
+impl From<BoundMethod> for Callable {
+    fn from(method: BoundMethod) -> Self {
+        Callable::BoundMethod(method)
     }
 }
 
 impl Class {
     pub fn new(name: &str, methods: HashMap<String, Function>) -> Self {
-        let methods = methods.into_iter().map(|(k, v)| (k, Rc::new(v))).collect();
+        let methods = methods.into_iter().map(|(n, f)| (n, f.into())).collect();
         Self {
             name: String::from(name),
             methods,
         }
     }
 
+    fn add_native_method(&mut self, method: NativeMethod) {
+        let name = String::from(method.name);
+        self.methods.insert(name, method.into());
+    }
+
     fn find_method(&self, name: &str) -> Option<Method> {
-        self.methods.get(name).map(Rc::clone)
+        self.methods.get(name).cloned()
     }
 }
 
@@ -316,7 +381,7 @@ impl LoxCallable for Rc<Class> {
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
         let instance = ClassInstance::new(self).into();
         if let Some(method) = self.find_method(INIT_METHOD) {
-            Function::bind(method, &instance).call(inter, args)?;
+            Method::bind(method, &instance).call(inter, args)?;
         }
 
         Ok(Value::Instance(instance))
@@ -355,7 +420,7 @@ impl ClassInstance {
                 .borrow()
                 .class
                 .find_method(name)
-                .map(|m| Function::bind(m, instance).into())
+                .map(|m| Method::bind(m, instance).into())
         })
     }
 
@@ -408,8 +473,16 @@ fn define_class(globals: &mut GlobalEnviron, class: Class) {
 }
 
 fn make_map_class() -> Class {
-    Class {
+    let mut class = Class {
         name: String::from("Map"),
         methods: HashMap::new(),
-    }
+    };
+
+    class.add_native_method(NativeMethod {
+        name: "count",
+        arity: 0,
+        fun: |_inter, _args, instance| Ok(Value::Integer(instance.fields.len() as i64)),
+    });
+
+    class
 }
