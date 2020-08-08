@@ -314,7 +314,7 @@ impl From<Function> for Method {
 impl BoundMethod {
     pub fn new(method: Method, instance: &InstanceRc) -> Self {
         Self {
-            method: method,
+            method,
             instance: Rc::clone(instance),
         }
     }

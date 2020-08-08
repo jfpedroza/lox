@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
+use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable, Method};
 use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
@@ -149,6 +149,18 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn stmt_to_method_entry(&self, stmt: &Stmt, is_static: bool) -> (String, Method) {
+        match &stmt.kind {
+            StmtKind::Function(name, params, body) => {
+                let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
+                let is_init = !is_static && name == INIT_METHOD;
+                let method = Function::new(name, params, body, &self.env, is_init);
+                (name.clone(), method.into())
+            }
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -464,23 +476,24 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
-    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ExecuteRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        methods: &[Stmt],
+        static_methods: &[Stmt],
+        loc: Loc,
+    ) -> ExecuteRes {
         self.define(name, Value::Nil);
 
         let methods: HashMap<_, _> = methods
             .iter()
-            .map(|stmt| match &stmt.kind {
-                StmtKind::Function(name, params, body) => {
-                    let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
-                    let is_init = name == INIT_METHOD;
-                    let method = Function::new(name, params, body, &self.env, is_init);
-                    (name.clone(), method.into())
-                }
-                _ => unreachable!(),
-            })
+            .map(|stmt| self.stmt_to_method_entry(stmt, false))
             .collect();
 
-        let static_methods = HashMap::new();
+        let static_methods: HashMap<_, _> = static_methods
+            .iter()
+            .map(|stmt| self.stmt_to_method_entry(stmt, true))
+            .collect();
 
         let class = Class::new(name, methods, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;

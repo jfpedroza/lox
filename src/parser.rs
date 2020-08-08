@@ -330,13 +330,18 @@ impl<'a> Parser<'a> {
 
         self.consume(LeftBrace, |p| p.expected_open_brace_error("class body"))?;
         let mut methods = Vec::new();
+        let mut static_methods = Vec::new();
         while !self.check(RightBrace) && !self.is_at_end() {
-            methods.push(self.function("method")?);
+            if self.matches(&[Class]).is_some() {
+                static_methods.push(self.function("static method")?);
+            } else {
+                methods.push(self.function("method")?);
+            }
         }
 
         self.consume(RightBrace, |p| p.expected_close_brace_error("class body"))?;
 
-        Ok(Stmt::class(name.lexeme, methods, *loc))
+        Ok(Stmt::class(name.lexeme, methods, static_methods, *loc))
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {

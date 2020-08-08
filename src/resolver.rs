@@ -32,6 +32,7 @@ enum FunctionType {
     Function,
     Method,
     Initializer,
+    StaticMethod,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -48,6 +49,7 @@ pub enum ResolutionError {
     ReturnOutsideFun(Loc),
     ThisOutsideClass(Loc),
     ReturnInInitializer(Loc),
+    ThisInStaticMethod(Loc),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -302,6 +304,8 @@ impl ExprVisitor<()> for Resolver<'_> {
     fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {
         if self.current_class == ClassType::None {
             self.errors.push(ResolutionError::ThisOutsideClass(loc));
+        } else if self.current_fun == FunctionType::StaticMethod {
+            self.errors.push(ResolutionError::ThisInStaticMethod(loc));
         } else {
             self.resolve_local(THIS_KEYWORD, loc, true);
         }
@@ -393,7 +397,13 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        methods: &[Stmt],
+        static_methods: &[Stmt],
+        loc: Loc,
+    ) -> ResolveRes {
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
@@ -413,6 +423,15 @@ impl StmtVisitor<()> for Resolver<'_> {
                     };
 
                     self.resolve_function(params, body, declaration)?;
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        for method in static_methods {
+            match &method.kind {
+                StmtKind::Function(_name, params, body) => {
+                    self.resolve_function(params, body, FunctionType::StaticMethod)?;
                 }
                 _ => unreachable!(),
             }

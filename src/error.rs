@@ -178,6 +178,7 @@ impl Display for ResolutionError {
             ReturnInInitializer(loc) => {
                 write!(f, "[{}] Cannot return a value from an initializer", loc)
             }
+            ThisInStaticMethod(loc) => write!(f, "[{}] Cannot use 'this' in a static method", loc),
             BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
             Multiple(errors) => {
                 let error_string: String =

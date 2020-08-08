@@ -11,7 +11,7 @@ pub enum StmtKind {
     Block(Vec<Stmt>),
     Function(String, Vec<Param>, Vec<Stmt>),
     Return(Option<Expr>),
-    Class(String, Vec<Stmt>),
+    Class(String, Vec<Stmt>, Vec<Stmt>),
     Break,
 }
 
@@ -49,7 +49,13 @@ pub trait Visitor<Res> {
 
     fn visit_return_stmt(&mut self, ret: &Option<Expr>, loc: Loc) -> Self::Result;
 
-    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> Self::Result;
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        methods: &[Stmt],
+        static_methods: &[Stmt],
+        loc: Loc,
+    ) -> Self::Result;
 
     fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
 }
@@ -90,8 +96,11 @@ impl Stmt {
         Stmt::new(StmtKind::Return(ret), loc)
     }
 
-    pub fn class(name: &str, methods: Vec<Stmt>, loc: Loc) -> Self {
-        Stmt::new(StmtKind::Class(String::from(name), methods), loc)
+    pub fn class(name: &str, methods: Vec<Stmt>, static_methods: Vec<Stmt>, loc: Loc) -> Self {
+        Stmt::new(
+            StmtKind::Class(String::from(name), methods, static_methods),
+            loc,
+        )
     }
 
     pub fn break_stmt(loc: Loc) -> Self {
@@ -116,7 +125,9 @@ impl Stmt {
                 visitor.visit_function_stmt(name, params, body, self.loc)
             }
             Return(ret) => visitor.visit_return_stmt(ret, self.loc),
-            Class(name, methods) => visitor.visit_class_stmt(name, methods, self.loc),
+            Class(name, methods, static_methods) => {
+                visitor.visit_class_stmt(name, methods, static_methods, self.loc)
+            }
             Break => visitor.visit_break_stmt(self.loc),
         }
     }
