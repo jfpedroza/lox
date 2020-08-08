@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-use crate::constants::THIS_KEYWORD;
+use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
@@ -31,6 +31,7 @@ enum FunctionType {
     None,
     Function,
     Method,
+    Initializer,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -46,6 +47,7 @@ pub enum ResolutionError {
     DuplicateArgumentName(Loc, String),
     ReturnOutsideFun(Loc),
     ThisOutsideClass(Loc),
+    ReturnInInitializer(Loc),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -381,6 +383,10 @@ impl StmtVisitor<()> for Resolver<'_> {
         }
 
         if let Some(ret_expr) = ret {
+            if self.current_fun == FunctionType::Initializer {
+                self.errors.push(ResolutionError::ReturnInInitializer(loc));
+            }
+
             self.resolve_expr(ret_expr)?;
         }
 
@@ -398,9 +404,14 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.declare_define_this(loc);
 
         for method in methods {
-            let declaration = FunctionType::Method;
             match &method.kind {
-                StmtKind::Function(_name, params, body) => {
+                StmtKind::Function(name, params, body) => {
+                    let declaration = if name == INIT_METHOD {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+
                     self.resolve_function(params, body, declaration)?;
                 }
                 _ => unreachable!(),

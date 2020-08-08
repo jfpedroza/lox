@@ -1,3 +1,4 @@
+use crate::constants::INIT_METHOD;
 use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::stmt::Stmt;
 use crate::value::Value;
@@ -27,6 +28,7 @@ pub struct Function {
     params: Vec<String>,
     body: Vec<Stmt>,
     closure: Option<Env>,
+    is_init: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -162,12 +164,19 @@ impl From<NativeFunction> for Callable {
 }
 
 impl Function {
-    pub fn new(name: &str, params: Vec<String>, body: &[Stmt], closure: &Option<Env>) -> Self {
+    pub fn new(
+        name: &str,
+        params: Vec<String>,
+        body: &[Stmt],
+        closure: &Option<Env>,
+        is_init: bool,
+    ) -> Self {
         Self {
             name: Some(String::from(name)),
             params,
             body: body.to_vec(),
             closure: closure.as_ref().map(Rc::clone),
+            is_init,
         }
     }
 
@@ -177,6 +186,7 @@ impl Function {
             params,
             body: body.to_vec(),
             closure: closure.as_ref().map(Rc::clone),
+            is_init: false,
         }
     }
 
@@ -192,10 +202,22 @@ impl Function {
         }
 
         match inter.execute_block(&self.body, env) {
-            Ok(()) => Ok(Value::Nil),
-            Err(RuntimeInterrupt::Return(ret)) => Ok(ret),
+            Ok(()) => Ok(if self.is_init {
+                self.get_this(closure)
+            } else {
+                Value::Nil
+            }),
+            Err(RuntimeInterrupt::Return(ret)) => Ok(if self.is_init {
+                self.get_this(closure)
+            } else {
+                ret
+            }),
             Err(error) => Err(error.expect_error()),
         }
+    }
+
+    fn get_this(&self, closure: &Option<Env>) -> Value {
+        closure.as_ref().unwrap().borrow().get_at(0, 0)
     }
 
     fn bind(fun: Rc<Function>, instance: &InstanceRc) -> Callable {
@@ -286,12 +308,18 @@ impl Class {
 
 impl LoxCallable for Rc<Class> {
     fn arity(&self) -> usize {
-        0
+        self.find_method(INIT_METHOD)
+            .map(|m| m.arity())
+            .unwrap_or(0)
     }
 
-    fn call(&self, _inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
-        let instance = ClassInstance::new(self);
-        Ok(instance.into())
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+        let instance = ClassInstance::new(self).into();
+        if let Some(method) = self.find_method(INIT_METHOD) {
+            Function::bind(method, &instance).call(inter, args)?;
+        }
+
+        Ok(Value::Instance(instance))
     }
 }
 
@@ -339,6 +367,12 @@ impl ClassInstance {
 impl Display for ClassInstance {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "<instance of {}>", self.class.name)
+    }
+}
+
+impl Into<InstanceRc> for ClassInstance {
+    fn into(self) -> InstanceRc {
+        Rc::new(RefCell::new(self))
     }
 }
 

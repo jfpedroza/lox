@@ -175,6 +175,9 @@ impl Display for ResolutionError {
             ),
             ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
             ThisOutsideClass(loc) => write!(f, "[{}] Cannot use 'this' outside of a class", loc),
+            ReturnInInitializer(loc) => {
+                write!(f, "[{}] Cannot return a value from an initializer", loc)
+            }
             BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
             Multiple(errors) => {
                 let error_string: String =

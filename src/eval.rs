@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
-use crate::constants::THIS_KEYWORD;
+use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
@@ -210,7 +210,7 @@ impl Environ {
         unsafe { &*env }
     }
 
-    fn get_at(&self, distance: usize, index: usize) -> Value {
+    pub fn get_at(&self, distance: usize, index: usize) -> Value {
         self.ancestor(distance).values[index].clone()
     }
 
@@ -228,7 +228,7 @@ impl Environ {
         unsafe { &mut *env }
     }
 
-    fn assign_at(&mut self, distance: usize, index: usize, val: Value) {
+    pub fn assign_at(&mut self, distance: usize, index: usize, val: Value) {
         self.ancestor_mut(distance).values[index] = val;
     }
 }
@@ -447,7 +447,7 @@ impl StmtVisitor<()> for Interpreter {
         _loc: Loc,
     ) -> ExecuteRes {
         let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
-        let function = Function::new(name, params, body, &self.env);
+        let function = Function::new(name, params, body, &self.env, false);
         self.define(name, function.into());
         Ok(())
     }
@@ -470,7 +470,8 @@ impl StmtVisitor<()> for Interpreter {
             .map(|stmt| match &stmt.kind {
                 StmtKind::Function(name, params, body) => {
                     let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
-                    let method = Function::new(name, params, body, &self.env);
+                    let is_init = name == INIT_METHOD;
+                    let method = Function::new(name, params, body, &self.env, is_init);
                     (name.clone(), method)
                 }
                 _ => unreachable!(),
