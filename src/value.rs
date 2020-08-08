@@ -53,6 +53,15 @@ impl Value {
             Instance(_) => types::INSTANCE,
         }
     }
+
+    pub fn into_instance(self) -> Option<InstanceRc> {
+        use Value::*;
+        match self {
+            Instance(instance) => Some(instance),
+            Callable(callable) => callable.into_instance(),
+            _ => None,
+        }
+    }
 }
 
 impl From<&LitExpr> for Value {

@@ -53,6 +53,8 @@ pub struct BoundMethod {
 pub struct Class {
     name: String,
     methods: HashMap<String, Method>,
+    is_meta: bool,
+    metainstance: Option<InstanceRc>,
 }
 
 #[derive(Debug)]
@@ -82,6 +84,13 @@ impl Callable {
             Function(_) => types::FUNCTION,
             BoundMethod(_) => types::FUNCTION,
             Class(_) => types::CLASS,
+        }
+    }
+
+    pub fn into_instance(self) -> Option<InstanceRc> {
+        match self {
+            Callable::Class(class) => class.metainstance.as_ref().map(Rc::clone),
+            _ => None,
         }
     }
 }
@@ -258,7 +267,11 @@ impl From<Function> for Callable {
 
 impl Debug for NativeMethod {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "<native method {}>", self.name)
+        f.debug_struct("NativeMethod")
+            .field("name", &String::from(self.name))
+            .field("arity", &self.arity)
+            .field("fun", &String::from("<native function>"))
+            .finish()
     }
 }
 
@@ -353,11 +366,28 @@ impl From<BoundMethod> for Callable {
 }
 
 impl Class {
-    pub fn new(name: &str, methods: HashMap<String, Function>) -> Self {
-        let methods = methods.into_iter().map(|(n, f)| (n, f.into())).collect();
+    pub fn new(
+        name: &str,
+        methods: HashMap<String, Method>,
+        static_methods: HashMap<String, Method>,
+    ) -> Self {
+        let metaclass = Rc::new(Self::new_meta(name, static_methods));
+        let metainstance = ClassInstance::new(&metaclass).into();
+
         Self {
             name: String::from(name),
             methods,
+            is_meta: false,
+            metainstance: Some(metainstance),
+        }
+    }
+
+    fn new_meta(name: &str, methods: HashMap<String, Method>) -> Self {
+        Self {
+            name: String::from(name),
+            methods,
+            is_meta: true,
+            metainstance: None,
         }
     }
 
@@ -390,7 +420,8 @@ impl LoxCallable for Rc<Class> {
 
 impl Display for Class {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "<class {}>", self.name)
+        let class = if self.is_meta { "metaclass" } else { "class" };
+        write!(f, "<{} {}>", class, self.name)
     }
 }
 
@@ -473,10 +504,7 @@ fn define_class(globals: &mut GlobalEnviron, class: Class) {
 }
 
 fn make_map_class() -> Class {
-    let mut class = Class {
-        name: String::from("Map"),
-        methods: HashMap::new(),
-    };
+    let mut class = Class::new("Map", HashMap::new(), HashMap::new());
 
     class.add_native_method(NativeMethod {
         name: "count",

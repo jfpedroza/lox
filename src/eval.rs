@@ -355,22 +355,24 @@ impl ExprVisitor<Value> for Interpreter {
 
     fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> ValueRes {
         let obj = self.evaluate(obj)?;
-        if let Value::Instance(instance) = obj {
+        let val_type = obj.get_type();
+        if let Some(instance) = obj.into_instance() {
             ClassInstance::get(&instance, name)
                 .ok_or_else(|| RuntimeError::undefined_property(loc, name))
         } else {
-            Err(RuntimeError::no_properties(loc, obj))
+            Err(RuntimeError::no_properties(loc, val_type))
         }
     }
 
     fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
         let obj = self.evaluate(obj)?;
-        if let Value::Instance(instance) = obj {
+        let val_type = obj.get_type();
+        if let Some(instance) = obj.into_instance() {
             let val = self.evaluate(expr)?;
             instance.borrow_mut().set(name, val.clone());
             Ok(val)
         } else {
-            Err(RuntimeError::no_fields(loc, obj))
+            Err(RuntimeError::no_fields(loc, val_type))
         }
     }
 
@@ -472,13 +474,15 @@ impl StmtVisitor<()> for Interpreter {
                     let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
                     let is_init = name == INIT_METHOD;
                     let method = Function::new(name, params, body, &self.env, is_init);
-                    (name.clone(), method)
+                    (name.clone(), method.into())
                 }
                 _ => unreachable!(),
             })
             .collect();
 
-        let class = Class::new(name, methods);
+        let static_methods = HashMap::new();
+
+        let class = Class::new(name, methods, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
@@ -639,16 +643,16 @@ impl RuntimeError {
         Self::MismatchingArity(loc, expected, got)
     }
 
-    fn no_properties(loc: Loc, val: Value) -> Self {
-        Self::NoProperties(loc, String::from(val.get_type()))
+    fn no_properties(loc: Loc, val_type: &str) -> Self {
+        Self::NoProperties(loc, String::from(val_type))
     }
 
     fn undefined_property(loc: Loc, name: &str) -> Self {
         Self::UndefinedProperty(loc, String::from(name))
     }
 
-    fn no_fields(loc: Loc, val: Value) -> Self {
-        Self::NoFields(loc, String::from(val.get_type()))
+    fn no_fields(loc: Loc, val_type: &str) -> Self {
+        Self::NoFields(loc, String::from(val_type))
     }
 }
 
