@@ -23,7 +23,7 @@ pub enum ParsingError {
     ExpectedOpenParen(Loc, String, String),
     ExpectedCloseParen(Loc, String, String),
     ExpectedOpenBrace(Loc, String, String),
-    ExpectedCloseBrace(Loc, String),
+    ExpectedCloseBrace(Loc, String, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
     ExpectedName(Loc, String, String),
@@ -131,6 +131,8 @@ impl<'a> Parser<'a> {
         } else if self.check(Fun) && self.check_next(Identifier) {
             self.advance();
             self.function("function")
+        } else if self.matches(&[Class]).is_some() {
+            self.class_declaration()
         } else {
             self.statement()
         };
@@ -250,7 +252,7 @@ impl<'a> Parser<'a> {
             stmts.push(self.declaration()?);
         }
 
-        self.consume(RightBrace, Self::expected_close_brace_error)?;
+        self.consume(RightBrace, |p| p.expected_close_brace_error("block"))?;
 
         Ok(stmts)
     }
@@ -322,6 +324,26 @@ impl<'a> Parser<'a> {
         Ok(params)
     }
 
+    fn class_declaration(&mut self) -> StmtParseRes {
+        let Token { loc, .. } = self.previous();
+        let name = self.consume(Identifier, |p| p.expected_name_error("class"))?;
+
+        self.consume(LeftBrace, |p| p.expected_open_brace_error("class body"))?;
+        let mut methods = Vec::new();
+        let mut static_methods = Vec::new();
+        while !self.check(RightBrace) && !self.is_at_end() {
+            if self.matches(&[Class]).is_some() {
+                static_methods.push(self.function("static method")?);
+            } else {
+                methods.push(self.function("method")?);
+            }
+        }
+
+        self.consume(RightBrace, |p| p.expected_close_brace_error("class body"))?;
+
+        Ok(Stmt::class(name.lexeme, methods, static_methods, *loc))
+    }
+
     fn expression_statement(&mut self) -> StmtParseRes {
         let expr = self.expression()?;
         if self.allow_expression && self.is_at_end() {
@@ -355,7 +377,10 @@ impl<'a> Parser<'a> {
             PercentEqual,
         ]) {
             let value = self.expression()?;
-            return self.make_assign_expr(expr, token, value);
+            return self.make_assign_expr(expr, token, value).or_else(|err| {
+                self.errors.push(err);
+                Ok(Expr::default())
+            });
         }
 
         Ok(expr)
@@ -374,10 +399,25 @@ impl<'a> Parser<'a> {
             };
 
             Expr::assign(name, assign_value, expr.loc)
+        } else if let ExprKind::Get(obj, name) = expr.kind {
+            let assign_value = match op_token.kind {
+                Equal => value,
+                PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
+                | PercentEqual => {
+                    let op = op_token.kind.into();
+                    Expr::binary(
+                        Expr::get(*obj.clone(), &name, expr.loc),
+                        op,
+                        value,
+                        op_token.loc,
+                    )
+                }
+                _ => unreachable!(),
+            };
+
+            Expr::set(obj, name, assign_value, expr.loc)
         } else {
-            self.errors
-                .push(ParsingError::InvalidAssignmentTarget(expr.loc));
-            value
+            return Err(ParsingError::InvalidAssignmentTarget(expr.loc));
         })
     }
 
@@ -460,21 +500,34 @@ impl<'a> Parser<'a> {
             let right = self.unary()?;
             // ++i generates i = i + 1
             self.make_assign_expr(right, op_token, Expr::integer(1, op_token.loc))
+                .or_else(|err| {
+                    self.errors.push(err);
+                    Ok(Expr::default())
+                })
         } else {
             self.postfix()
         }
     }
 
     fn postfix(&mut self) -> ExprParseRes {
-        let left = self.primary()?;
+        let left = self.call()?;
 
         if let Some(op_token) = self.matches(&[PlusPlus, MinusMinus]) {
             // i++ generates i = i + 1, i - 1
             let one = Expr::integer(1, op_token.loc);
-            let left = self.make_assign_expr(left, op_token, one)?;
-            let name = match left.kind {
-                ExprKind::Assign(ref name, _) => name,
-                _ => unreachable!(),
+            let (left, name) = match self.make_assign_expr(left, op_token, one) {
+                Ok(left) => {
+                    let name = match &left.kind {
+                        ExprKind::Assign(name, _) => Expr::variable(name, left.loc),
+                        ExprKind::Set(obj, name, _) => Expr::get(*obj.clone(), name, left.loc),
+                        _ => unreachable!(),
+                    };
+                    (left, name)
+                }
+                Err(err) => {
+                    self.errors.push(err);
+                    return Ok(Expr::default());
+                }
             };
 
             let op = match op_token.kind {
@@ -484,18 +537,29 @@ impl<'a> Parser<'a> {
             };
 
             let one = Expr::integer(1, op_token.loc);
-            let right = Expr::binary(Expr::variable(name, left.loc), op, one, op_token.loc);
+            let right = Expr::binary(name, op, one, op_token.loc);
 
             let left_loc = left.loc;
             Ok(Expr::comma(left, right, left_loc))
         } else {
-            let mut expr = left;
-            while self.matches(&[LeftParen]).is_some() {
-                expr = self.finish_call(expr)?;
-            }
-
-            Ok(expr)
+            Ok(left)
         }
+    }
+
+    fn call(&mut self) -> ExprParseRes {
+        let mut expr = self.primary()?;
+        loop {
+            expr = if self.matches(&[LeftParen]).is_some() {
+                self.finish_call(expr)?
+            } else if let Some(dot_token) = self.matches(&[Dot]) {
+                let name = self.consume(Identifier, |p| p.expected_name_error("property"))?;
+                Expr::get(expr, name.lexeme, dot_token.loc)
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
     }
 
     fn finish_call(&mut self, callee: Expr) -> ExprParseRes {
@@ -521,7 +585,7 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> ExprParseRes {
         let primary_tokens = [
-            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, Fun,
+            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, This, Fun,
         ];
         let token = self
             .matches(&primary_tokens)
@@ -541,6 +605,7 @@ impl<'a> Parser<'a> {
                 Expr::grouping(expr, token.loc)
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
+            This => Expr::this(token.loc),
             Fun => self.anon_function()?,
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
         })
@@ -590,9 +655,9 @@ impl<'a> Parser<'a> {
         ParsingError::ExpectedOpenBrace(token.loc, String::from(before), token.lexeme.to_string())
     }
 
-    fn expected_close_brace_error(&self) -> ParsingError {
+    fn expected_close_brace_error(&self, after: &str) -> ParsingError {
         let token = self.peek();
-        ParsingError::ExpectedCloseBrace(token.loc, token.lexeme.to_string())
+        ParsingError::ExpectedCloseBrace(token.loc, String::from(after), token.lexeme.to_string())
     }
 
     fn expected_expression_error(&self) -> ParsingError {

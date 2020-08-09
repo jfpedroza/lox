@@ -1,8 +1,10 @@
-use crate::callable::{Callable, LoxCallable};
+use crate::callable::{Callable, ClassInstance, InstanceRc, LoxCallable};
 use crate::expr::LitExpr;
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::rc::Rc;
 
-#[derive(PartialEq, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Integer(i64),
     Float(f64),
@@ -10,6 +12,7 @@ pub enum Value {
     Boolean(bool),
     Nil,
     Callable(Callable),
+    Instance(InstanceRc),
 }
 
 pub mod types {
@@ -18,6 +21,7 @@ pub mod types {
     pub const STRING: &str = "string";
     pub const BOOL: &str = "bool";
     pub const NIL: &str = "nil";
+    pub const INSTANCE: &str = "instance";
 }
 
 impl Value {
@@ -46,6 +50,16 @@ impl Value {
             Boolean(_) => types::BOOL,
             Nil => types::NIL,
             Callable(callable) => callable.get_type(),
+            Instance(_) => types::INSTANCE,
+        }
+    }
+
+    pub fn into_instance(self) -> Option<InstanceRc> {
+        use Value::*;
+        match self {
+            Instance(instance) => Some(instance),
+            Callable(callable) => callable.into_instance(),
+            _ => None,
         }
     }
 }
@@ -99,6 +113,12 @@ impl<T: LoxCallable> From<T> for Value {
     }
 }
 
+impl From<ClassInstance> for Value {
+    fn from(input: ClassInstance) -> Self {
+        Value::Instance(Rc::new(RefCell::new(input)))
+    }
+}
+
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(input: Option<T>) -> Self {
         match input {
@@ -118,6 +138,23 @@ impl Display for Value {
             Boolean(boolean) => write!(f, "{}", boolean),
             Nil => write!(f, "nil"),
             Callable(callable) => callable.fmt(f),
+            Instance(instance) => instance.borrow().fmt(f),
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        use Value::*;
+        match (self, other) {
+            (Integer(left), Integer(right)) => left == right,
+            (Float(left), Float(right)) => left == right,
+            (Str(left), Str(right)) => left == right,
+            (Boolean(left), Boolean(right)) => left == right,
+            (Nil, Nil) => true,
+            (Callable(left), Callable(right)) => left == right,
+            (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
+            (_, _) => false,
         }
     }
 }

@@ -44,6 +44,45 @@ fn test_return_outside_fun() {
 }
 
 #[test]
+fn test_this_outside_class() {
+    let input = r#"this;"#;
+    assert_eq!(
+        Err(ResolutionError::ThisOutsideClass(Loc::new(0, 0))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_return_in_initializer() {
+    let input = r#"
+    class MyClass {
+        init() {
+            return true;
+        }
+    }
+    "#;
+    assert_eq!(
+        Err(ResolutionError::ReturnInInitializer(Loc::new(3, 12))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_return_in_static_method() {
+    let input = r#"
+    class MyClass {
+        class method() {
+            print this;
+        }
+    }
+    "#;
+    assert_eq!(
+        Err(ResolutionError::ThisInStaticMethod(Loc::new(3, 18))),
+        resolve(input)
+    )
+}
+
+#[test]
 fn test_break_outside_loop() {
     let input = r#"break;"#;
     assert_eq!(

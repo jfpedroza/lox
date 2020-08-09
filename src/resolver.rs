@@ -1,22 +1,25 @@
 #[cfg(test)]
 mod tests;
 
+use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, Visitor as StmtVisitor};
+use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
 use std::collections::HashMap;
 
 pub struct Resolver<'a> {
     inter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, ResolvedVar>>,
     current_fun: FunctionType,
+    current_class: ClassType,
     in_loop: bool,
     errors: Vec<ResolutionError>,
     pub warnings: Vec<Warning>,
 }
 
+#[derive(Debug)]
 struct ResolvedVar {
     loc: Loc,
     index: usize,
@@ -28,6 +31,15 @@ struct ResolvedVar {
 enum FunctionType {
     None,
     Function,
+    Method,
+    Initializer,
+    StaticMethod,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum ClassType {
+    None,
+    Class,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -36,6 +48,9 @@ pub enum ResolutionError {
     VarAlreadyInScope(Loc, String),
     DuplicateArgumentName(Loc, String),
     ReturnOutsideFun(Loc),
+    ThisOutsideClass(Loc),
+    ReturnInInitializer(Loc),
+    ThisInStaticMethod(Loc),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -48,6 +63,7 @@ impl<'a> Resolver<'a> {
             inter,
             scopes: Vec::new(),
             current_fun: FunctionType::None,
+            current_class: ClassType::None,
             in_loop: false,
             errors: vec![],
             warnings: vec![],
@@ -140,9 +156,22 @@ impl<'a> Resolver<'a> {
         if let Some(scope) = self.scopes.last_mut() {
             let resolved = scope
                 .get_mut(name)
-                .expect(&format!("Variable '{}' wasn't declared", name));
+                .unwrap_or_else(|| panic!("Variable '{}' wasn't declared", name));
             resolved.defined = true;
         }
+    }
+
+    fn declare_define_this(&mut self, loc: Loc) {
+        let scope = self.scopes.last_mut().unwrap();
+        scope.insert(
+            String::from(THIS_KEYWORD),
+            ResolvedVar {
+                loc,
+                index: scope.len(),
+                defined: true,
+                used: true,
+            },
+        );
     }
 
     fn resolve_local(&mut self, name: &str, loc: Loc, reading: bool) {
@@ -263,6 +292,27 @@ impl ExprVisitor<()> for Resolver<'_> {
         self.resolve_expr(callee)?;
         self.resolve_exprs(args)
     }
+
+    fn visit_get_expr(&mut self, obj: &Expr, _name: &str, _loc: Loc) -> ResolveRes {
+        self.resolve_expr(obj)
+    }
+
+    fn visit_set_expr(&mut self, obj: &Expr, _name: &str, expr: &Expr, _loc: Loc) -> ResolveRes {
+        self.resolve_expr(expr)?;
+        self.resolve_expr(obj)
+    }
+
+    fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {
+        if self.current_class == ClassType::None {
+            self.errors.push(ResolutionError::ThisOutsideClass(loc));
+        } else if self.current_fun == FunctionType::StaticMethod {
+            self.errors.push(ResolutionError::ThisInStaticMethod(loc));
+        } else {
+            self.resolve_local(THIS_KEYWORD, loc, true);
+        }
+
+        Ok(())
+    }
 }
 
 impl StmtVisitor<()> for Resolver<'_> {
@@ -338,8 +388,61 @@ impl StmtVisitor<()> for Resolver<'_> {
         }
 
         if let Some(ret_expr) = ret {
+            if self.current_fun == FunctionType::Initializer {
+                self.errors.push(ResolutionError::ReturnInInitializer(loc));
+            }
+
             self.resolve_expr(ret_expr)?;
         }
+
+        Ok(())
+    }
+
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        methods: &[Stmt],
+        static_methods: &[Stmt],
+        loc: Loc,
+    ) -> ResolveRes {
+        let enclosing_class = self.current_class;
+        self.current_class = ClassType::Class;
+
+        self.declare_var(name, loc)?;
+        self.define(name);
+
+        self.begin_scope();
+        self.declare_define_this(loc);
+
+        for method in methods {
+            match &method.kind {
+                StmtKind::Function(name, params, body) => {
+                    let declaration = if name == INIT_METHOD {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+
+                    self.resolve_function(params, body, declaration)?;
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        for method in static_methods {
+            match &method.kind {
+                StmtKind::Function(_name, params, body) => {
+                    self.resolve_function(params, body, FunctionType::StaticMethod)?;
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        self.end_scope();
+
+        self.resolve_local(name, loc, false);
+
+        self.current_class = enclosing_class;
 
         Ok(())
     }
