@@ -551,9 +551,9 @@ impl<'a> Parser<'a> {
         loop {
             expr = if self.matches(&[LeftParen]).is_some() {
                 self.finish_call(expr)?
-            } else if self.matches(&[Dot]).is_some() {
+            } else if let Some(dot_token) = self.matches(&[Dot]) {
                 let name = self.consume(Identifier, |p| p.expected_name_error("property"))?;
-                Expr::get(expr, name.lexeme, name.loc)
+                Expr::get(expr, name.lexeme, dot_token.loc)
             } else {
                 break;
             }

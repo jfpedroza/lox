@@ -19,6 +19,7 @@ pub struct Resolver<'a> {
     pub warnings: Vec<Warning>,
 }
 
+#[derive(Debug)]
 struct ResolvedVar {
     loc: Loc,
     index: usize,
@@ -438,6 +439,8 @@ impl StmtVisitor<()> for Resolver<'_> {
         }
 
         self.end_scope();
+
+        self.resolve_local(name, loc, false);
 
         self.current_class = enclosing_class;
 
