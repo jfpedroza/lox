@@ -47,6 +47,7 @@ pub enum ResolutionError {
     VarInInitalizer(Loc),
     VarAlreadyInScope(Loc, String),
     DuplicateArgumentName(Loc, String),
+    DuplicateMethod(Loc, String, String, String),
     ReturnOutsideFun(Loc),
     ThisOutsideClass(Loc),
     ReturnInInitializer(Loc),
@@ -414,16 +415,30 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.begin_scope();
         self.declare_define_this(loc);
 
+        let mut method_names = Vec::new();
+        let mut static_method_names = Vec::new();
+
         for method in methods {
             match &method.kind {
-                StmtKind::Function(name, params, body) => {
-                    let declaration = if name == INIT_METHOD {
+                StmtKind::Function(method_name, params, body) => {
+                    let declaration = if method_name == INIT_METHOD {
                         FunctionType::Initializer
                     } else {
                         FunctionType::Method
                     };
 
                     self.resolve_function(params, body, declaration)?;
+
+                    if method_names.contains(method_name) {
+                        self.errors.push(ResolutionError::duplicate_method(
+                            method.loc,
+                            name,
+                            "a method",
+                            method_name,
+                        ));
+                    } else {
+                        method_names.push(String::from(method_name));
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -431,8 +446,19 @@ impl StmtVisitor<()> for Resolver<'_> {
 
         for method in static_methods {
             match &method.kind {
-                StmtKind::Function(_name, params, body) => {
+                StmtKind::Function(method_name, params, body) => {
                     self.resolve_function(params, body, FunctionType::StaticMethod)?;
+
+                    if static_method_names.contains(method_name) {
+                        self.errors.push(ResolutionError::duplicate_method(
+                            method.loc,
+                            name,
+                            "a static method",
+                            method_name,
+                        ));
+                    } else {
+                        static_method_names.push(String::from(method_name));
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -474,5 +500,14 @@ impl ResolutionError {
 
     fn duplicate_arg_name(loc: Loc, name: &str) -> Self {
         Self::DuplicateArgumentName(loc, String::from(name))
+    }
+
+    fn duplicate_method(loc: Loc, class_name: &str, mtype: &str, name: &str) -> Self {
+        Self::DuplicateMethod(
+            loc,
+            String::from(class_name),
+            String::from(mtype),
+            String::from(name),
+        )
     }
 }
