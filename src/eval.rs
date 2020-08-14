@@ -1,11 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable, Method};
+use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
 use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
+use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -149,18 +149,6 @@ impl Interpreter {
         }
 
         Ok(())
-    }
-
-    fn stmt_to_method_entry(&self, stmt: &Stmt, is_static: bool) -> (String, Method) {
-        match &stmt.kind {
-            StmtKind::Function(name, params, body) => {
-                let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
-                let is_init = !is_static && name == INIT_METHOD;
-                let method = Function::new(name, params, body, &self.env, is_init);
-                (name.clone(), method.into())
-            }
-            _ => unreachable!(),
-        }
     }
 }
 
@@ -369,8 +357,8 @@ impl ExprVisitor<Value> for Interpreter {
         let obj = self.evaluate(obj)?;
         let val_type = obj.get_type();
         if let Some(instance) = obj.into_instance() {
-            ClassInstance::get(&instance, name)
-                .ok_or_else(|| RuntimeError::undefined_property(loc, name))
+            ClassInstance::get(self, &instance, name)
+                .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, name)))
         } else {
             Err(RuntimeError::no_properties(loc, val_type))
         }
@@ -458,6 +446,7 @@ impl StmtVisitor<()> for Interpreter {
         name: &str,
         params: &[Param],
         body: &[Stmt],
+        _kind: FunctionKind,
         _loc: Loc,
     ) -> ExecuteRes {
         let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
@@ -476,26 +465,33 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
-    fn visit_class_stmt(
-        &mut self,
-        name: &str,
-        methods: &[Stmt],
-        static_methods: &[Stmt],
-        loc: Loc,
-    ) -> ExecuteRes {
+    fn visit_class_stmt(&mut self, name: &str, class_methods: &[Stmt], loc: Loc) -> ExecuteRes {
         self.define(name, Value::Nil);
 
-        let methods: HashMap<_, _> = methods
-            .iter()
-            .map(|stmt| self.stmt_to_method_entry(stmt, false))
-            .collect();
+        let mut methods = HashMap::new();
+        let mut getters = HashMap::new();
+        let mut static_methods = HashMap::new();
 
-        let static_methods: HashMap<_, _> = static_methods
-            .iter()
-            .map(|stmt| self.stmt_to_method_entry(stmt, true))
-            .collect();
+        for stmt in class_methods {
+            match &stmt.kind {
+                StmtKind::Function(name, params, body, kind) => {
+                    let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
+                    let is_init = kind == &FunctionKind::Method && name == INIT_METHOD;
+                    let method = Function::new(name, params, body, &self.env, is_init).into();
+                    let name = name.clone();
 
-        let class = Class::new(name, methods, static_methods);
+                    match kind {
+                        FunctionKind::Method => methods.insert(name, method),
+                        FunctionKind::Getter => getters.insert(name, method),
+                        FunctionKind::StaticMethod => static_methods.insert(name, method),
+                        FunctionKind::Function => unreachable!(),
+                    };
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let class = Class::new(name, methods, getters, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }

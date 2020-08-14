@@ -650,14 +650,14 @@ fn test_locals() {
     var global_x;
     var global_y;
     var global_z;
-    
+
     {
         var x = 5;
         var y = true;
         {
             var x = 3;
             var z = "string";
-            
+
             global_x = x;
         }
 
@@ -787,6 +787,37 @@ fn test_class_out_of_scope() {
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert!(matches!(env_get(&inter, "inst"), Ok(Value::Instance(_))));
     assert_eq!(Ok("bar".into()), env_get(&inter, "foo"));
+}
+
+#[test]
+fn test_class_getters() {
+    let input = r#"
+    class Square {
+        init(x) { this.x = x; }
+        area { return this.x * this.x; }
+    }
+    var inst = Square(5);
+    var area = inst.area;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(25.into()), env_get(&inter, "area"));
+}
+
+#[test]
+fn test_class_getter_init() {
+    let input = r#"
+    class MyClass {
+        init { this.x = 5; return 3; }
+    }
+    var inst = MyClass();
+    var y = inst.init;
+    var x = inst.x;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(5.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "y"));
 }
 
 #[test]

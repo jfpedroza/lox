@@ -6,7 +6,7 @@ use crate::error::Warning;
 use crate::eval::Interpreter;
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, StmtKind, Visitor as StmtVisitor};
+use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use std::collections::HashMap;
 
 pub struct Resolver<'a> {
@@ -375,6 +375,7 @@ impl StmtVisitor<()> for Resolver<'_> {
         name: &str,
         params: &[Param],
         body: &[Stmt],
+        _kind: FunctionKind,
         loc: Loc,
     ) -> ResolveRes {
         self.declare_var(name, loc)?;
@@ -399,13 +400,8 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(
-        &mut self,
-        name: &str,
-        methods: &[Stmt],
-        static_methods: &[Stmt],
-        loc: Loc,
-    ) -> ResolveRes {
+    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
+        use FunctionKind::*;
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
@@ -420,8 +416,10 @@ impl StmtVisitor<()> for Resolver<'_> {
 
         for method in methods {
             match &method.kind {
-                StmtKind::Function(method_name, params, body) => {
-                    let declaration = if method_name == INIT_METHOD {
+                StmtKind::Function(method_name, params, body, kind)
+                    if [Method, Getter].contains(kind) =>
+                {
+                    let declaration = if kind == &Method && method_name == INIT_METHOD {
                         FunctionType::Initializer
                     } else {
                         FunctionType::Method
@@ -440,13 +438,7 @@ impl StmtVisitor<()> for Resolver<'_> {
                         method_names.push(String::from(method_name));
                     }
                 }
-                _ => unreachable!(),
-            }
-        }
-
-        for method in static_methods {
-            match &method.kind {
-                StmtKind::Function(method_name, params, body) => {
+                StmtKind::Function(method_name, params, body, StaticMethod) => {
                     self.resolve_function(params, body, FunctionType::StaticMethod)?;
 
                     if static_method_names.contains(method_name) {

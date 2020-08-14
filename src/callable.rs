@@ -53,6 +53,7 @@ pub struct BoundMethod {
 pub struct Class {
     name: String,
     methods: HashMap<String, Method>,
+    getters: HashMap<String, Method>,
     is_meta: bool,
     metainstance: Option<InstanceRc>,
 }
@@ -369,6 +370,7 @@ impl Class {
     pub fn new(
         name: &str,
         methods: HashMap<String, Method>,
+        getters: HashMap<String, Method>,
         static_methods: HashMap<String, Method>,
     ) -> Self {
         let metaclass = Rc::new(Self::new_meta(name, static_methods));
@@ -377,6 +379,7 @@ impl Class {
         Self {
             name: String::from(name),
             methods,
+            getters,
             is_meta: false,
             metainstance: Some(metainstance),
         }
@@ -386,6 +389,7 @@ impl Class {
         Self {
             name: String::from(name),
             methods,
+            getters: HashMap::new(),
             is_meta: true,
             metainstance: None,
         }
@@ -398,6 +402,10 @@ impl Class {
 
     fn find_method(&self, name: &str) -> Option<Method> {
         self.methods.get(name).cloned()
+    }
+
+    fn find_getter(&self, name: &str) -> Option<Method> {
+        self.getters.get(name).cloned()
     }
 }
 
@@ -445,14 +453,20 @@ impl ClassInstance {
         }
     }
 
-    pub fn get(instance: &InstanceRc, name: &str) -> Option<Value> {
-        instance.borrow().fields.get(name).cloned().or_else(|| {
-            instance
-                .borrow()
-                .class
-                .find_method(name)
-                .map(|m| Method::bind(m, instance).into())
-        })
+    pub fn get(inter: &mut Interpreter, instance: &InstanceRc, name: &str) -> Option<ValueRes> {
+        let field = { instance.borrow().fields.get(name).cloned().map(Ok) };
+
+        field
+            .or_else(|| {
+                let method = { instance.borrow().class.find_method(name) };
+                method.map(|m| Method::bind(m, instance).into()).map(Ok)
+            })
+            .or_else(|| {
+                let getter = { instance.borrow().class.find_getter(name) };
+                getter
+                    .map(|m| Method::bind(m, instance))
+                    .map(|m| m.call(inter, Vec::new()))
+            })
     }
 
     pub fn set(&mut self, name: &str, val: Value) {
@@ -504,7 +518,7 @@ fn define_class(globals: &mut GlobalEnviron, class: Class) {
 }
 
 fn make_map_class() -> Class {
-    let mut class = Class::new("Map", HashMap::new(), HashMap::new());
+    let mut class = Class::new("Map", HashMap::new(), HashMap::new(), HashMap::new());
 
     class.add_native_method(NativeMethod {
         name: "count",
