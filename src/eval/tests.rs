@@ -650,14 +650,14 @@ fn test_locals() {
     var global_x;
     var global_y;
     var global_z;
-    
+
     {
         var x = 5;
         var y = true;
         {
             var x = 3;
             var z = "string";
-            
+
             global_x = x;
         }
 
@@ -670,6 +670,154 @@ fn test_locals() {
     assert_eq!(Ok(3.into()), env_get(&inter, "global_x"));
     assert_eq!(Ok(true.into()), env_get(&inter, "global_y"));
     assert_eq!(Ok(5.into()), env_get(&inter, "global_z"));
+}
+
+#[test]
+fn test_class() {
+    let input = r#"
+    class MyClass {}
+    var inst = MyClass();
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert!(matches!(
+        env_get(&inter, "MyClass"),
+        Ok(Value::Callable(Callable::Class(_)))
+    ));
+    assert!(matches!(env_get(&inter, "inst"), Ok(Value::Instance(_))));
+}
+
+#[test]
+fn test_class_instance_fields() {
+    let input = r#"
+    class MyClass {}
+    var inst = MyClass();
+    inst.x = 3;
+    var x = inst.x;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "x"));
+}
+
+#[test]
+fn test_class_methods() {
+    let input = r#"
+    class MyClass {
+        a_method() { return 1; }
+        b_method(name) { return "Hello, " + name; }
+    }
+    var inst = MyClass();
+    var x = inst.a_method();
+    var y = inst.b_method("World");
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok("Hello, World".into()), env_get(&inter, "y"));
+}
+
+#[test]
+fn test_class_static_methods() {
+    let input = r#"
+    class MyClass {
+        class a_method() { return 1; }
+        class b_method(name) { return "Hello, " + name; }
+    }
+    var x = MyClass.a_method();
+    var y = MyClass.b_method("World");
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok("Hello, World".into()), env_get(&inter, "y"));
+}
+
+#[test]
+fn test_class_this() {
+    let input = r#"
+    class MyClass {
+        get_x() { return this.x; }
+        set_x(x) { this.x = x; }
+    }
+    var inst = MyClass();
+    inst.set_x(3);
+    var x = inst.get_x();
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "x"));
+}
+
+#[test]
+fn test_class_init() {
+    let input = r#"
+    class MyClass {
+        init(x) { this.x = x; }
+        get_x() { return this.x; }
+        set_x(x) { this.x = x; }
+    }
+    var inst = MyClass(1);
+    var x = inst.get_x();
+    inst.set_x(3);
+    var y = inst.get_x();
+    inst.init(-1);
+    var z = inst.get_x();
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "y"));
+    assert_eq!(Ok((-1).into()), env_get(&inter, "z"));
+}
+
+#[test]
+fn test_class_out_of_scope() {
+    let input = r#"var inst;
+    {
+        class MyClass {
+            foo() { return "bar"; }
+        }
+        inst = MyClass();
+    }
+
+    var foo = inst.foo();
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert!(matches!(env_get(&inter, "inst"), Ok(Value::Instance(_))));
+    assert_eq!(Ok("bar".into()), env_get(&inter, "foo"));
+}
+
+#[test]
+fn test_class_getters() {
+    let input = r#"
+    class Square {
+        init(x) { this.x = x; }
+        area { return this.x * this.x; }
+    }
+    var inst = Square(5);
+    var area = inst.area;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(25.into()), env_get(&inter, "area"));
+}
+
+#[test]
+fn test_class_getter_init() {
+    let input = r#"
+    class MyClass {
+        init { this.x = 5; return 3; }
+    }
+    var inst = MyClass();
+    var y = inst.init;
+    var x = inst.x;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(5.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "y"));
 }
 
 #[test]
@@ -727,6 +875,46 @@ fn test_too_many_arguments() {
     let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::MismatchingArity(Loc::new(0, 7), 0, 1)),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_no_properties() {
+    let input = r#"1.field;"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::NoProperties(
+            Loc::new(0, 1),
+            String::from(INT)
+        )),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_undefined_property() {
+    let input = r#"
+    class MyClass {}
+    var inst = MyClass();
+    print inst.field;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::UndefinedProperty(
+            Loc::new(3, 14),
+            String::from("field")
+        )),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_no_fields() {
+    let input = r#"1.field = 3;"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::NoFields(Loc::new(0, 1), String::from(INT))),
         inter.interpret(&stmts)
     );
 }

@@ -9,12 +9,21 @@ pub enum StmtKind {
     While(Expr, Box<Stmt>),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
-    Function(String, Vec<Param>, Vec<Stmt>),
+    Function(String, Vec<Param>, Vec<Stmt>, FunctionKind),
     Return(Option<Expr>),
+    Class(String, Vec<Stmt>),
     Break,
 }
 
 pub type Stmt = Located<StmtKind>;
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum FunctionKind {
+    Function,
+    Method,
+    Getter,
+    StaticMethod,
+}
 
 pub trait Visitor<Res> {
     type Error;
@@ -43,10 +52,13 @@ pub trait Visitor<Res> {
         name: &str,
         params: &[Param],
         body: &[Stmt],
+        kind: FunctionKind,
         loc: Loc,
     ) -> Self::Result;
 
     fn visit_return_stmt(&mut self, ret: &Option<Expr>, loc: Loc) -> Self::Result;
+
+    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> Self::Result;
 
     fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
 }
@@ -79,12 +91,25 @@ impl Stmt {
         Stmt::new(StmtKind::Block(stmts), loc)
     }
 
-    pub fn function(name: &str, params: Vec<Param>, body: Vec<Stmt>, loc: Loc) -> Self {
-        Stmt::new(StmtKind::Function(String::from(name), params, body), loc)
+    pub fn function(
+        name: &str,
+        params: Vec<Param>,
+        body: Vec<Stmt>,
+        kind: FunctionKind,
+        loc: Loc,
+    ) -> Self {
+        Stmt::new(
+            StmtKind::Function(String::from(name), params, body, kind),
+            loc,
+        )
     }
 
     pub fn return_stmt(ret: Option<Expr>, loc: Loc) -> Self {
         Stmt::new(StmtKind::Return(ret), loc)
+    }
+
+    pub fn class(name: &str, methods: Vec<Stmt>, loc: Loc) -> Self {
+        Stmt::new(StmtKind::Class(String::from(name), methods), loc)
     }
 
     pub fn break_stmt(loc: Loc) -> Self {
@@ -105,10 +130,11 @@ impl Stmt {
             While(expr, body) => visitor.visit_while_stmt(expr, body, self.loc),
             Var(name, init) => visitor.visit_var_stmt(name, init, self.loc),
             Block(stmts) => visitor.visit_block_stmt(stmts, self.loc),
-            Function(name, params, body) => {
-                visitor.visit_function_stmt(name, params, body, self.loc)
+            Function(name, params, body, kind) => {
+                visitor.visit_function_stmt(name, params, body, *kind, self.loc)
             }
             Return(ret) => visitor.visit_return_stmt(ret, self.loc),
+            Class(name, methods) => visitor.visit_class_stmt(name, methods, self.loc),
             Break => visitor.visit_break_stmt(self.loc),
         }
     }
@@ -124,5 +150,37 @@ impl From<Expr> for Stmt {
 impl Default for StmtKind {
     fn default() -> Self {
         StmtKind::Expression(Expr::default())
+    }
+}
+
+impl FunctionKind {
+    pub fn to_string(&self) -> &'static str {
+        use FunctionKind::*;
+        match self {
+            Function => "function",
+            Method => "method",
+            Getter => "getter method",
+            StaticMethod => "static method",
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        use FunctionKind::*;
+        match self {
+            Function => "function name",
+            Method => "method name",
+            Getter => "getter method name",
+            StaticMethod => "static method name",
+        }
+    }
+
+    pub fn body(&self) -> &'static str {
+        use FunctionKind::*;
+        match self {
+            Function => "function body",
+            Method => "method body",
+            Getter => "getter method body",
+            StaticMethod => "static method body",
+        }
     }
 }

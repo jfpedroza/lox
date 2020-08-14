@@ -92,8 +92,8 @@ impl Display for ParsingError {
             ExpectedOpenBrace(loc, before, got) => {
                 write!(f, "[{}] Expected '{{' before {}. Got {}", loc, before, got)
             }
-            ExpectedCloseBrace(loc, got) => {
-                write!(f, "[{}] Expected '}}' after block. Got {}", loc, got)
+            ExpectedCloseBrace(loc, after, got) => {
+                write!(f, "[{}] Expected '}}' after {}. Got {}", loc, after, got)
             }
             ExpectedColon(loc, got) => write!(
                 f,
@@ -135,12 +135,21 @@ impl Display for RuntimeError {
             ),
             DivisionByZero(loc) => write!(f, "[{}] Division or modulo by zero", loc),
             UndefinedVariable(loc, name) => write!(f, "[{}] Undefined variable '{}'", loc, name),
-            NotACallable(loc, val_type) => write!(f, "[{}] '{}' is not callable", loc, val_type),
+            NotACallable(loc, val_type) => {
+                write!(f, "[{}] Type '{}' is not callable", loc, val_type)
+            }
             MismatchingArity(loc, expected, got) => write!(
                 f,
                 "[{}] Expected {} arguments but got {}",
                 loc, expected, got
             ),
+            NoProperties(loc, val_type) => {
+                write!(f, "[{}] Type '{}' doesn't have properties", loc, val_type)
+            }
+            UndefinedProperty(loc, name) => write!(f, "[{}] Undefined property '{}'", loc, name),
+            NoFields(loc, val_type) => {
+                write!(f, "[{}] Type '{}' doesn't have fields", loc, val_type)
+            }
         }
     }
 }
@@ -164,8 +173,18 @@ impl Display for ResolutionError {
                 "[{}] Duplicate argument '{}' in function definition",
                 loc, name
             ),
+            DuplicateMethod(loc, class_name, mtype, name) => write!(
+                f,
+                "[{}] Class '{}' already has {} called '{}'",
+                loc, class_name, mtype, name
+            ),
             ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
-            BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside a loop", loc),
+            ThisOutsideClass(loc) => write!(f, "[{}] Cannot use 'this' outside of a class", loc),
+            ReturnInInitializer(loc) => {
+                write!(f, "[{}] Cannot return a value from an initializer", loc)
+            }
+            ThisInStaticMethod(loc) => write!(f, "[{}] Cannot use 'this' in a static method", loc),
+            BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();

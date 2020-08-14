@@ -2,6 +2,7 @@ program        → declaration* EOF ;
 
 declaration    → varDecl
                | funDecl
+               | classDecl
                | statement ;
 
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
@@ -9,6 +10,11 @@ varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 funDecl        → "fun" function ;
 function       → IDENTIFIER "(" parameters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
+
+classDecl      → "class" IDENTIFIER "{" method* "}" ;
+method         → "class"? function
+               | getterMethod
+getterMethod   → IDENTIFIER block
 
 statement      → exprStmt
                | ifStmt
@@ -29,7 +35,7 @@ block          → "{" declaration* "}" ;
 returnStmt     → "return" expression? ";" ;
 
 expression     → assignment ( "," expression )? ;
-assignment     → IDENTIFIER assignment_op assignment
+assignment     → ( call "." )? IDENTIFIER assignment_op assignment
                | conditional ;
 conditional    → logic_or ( "?" expression : conditional )? ;
 logic_or       → logic_and ( "or" logic_and )* ;
@@ -40,11 +46,13 @@ addition       → multiplication ( ( "-" | "+" ) multiplication )* ;
 multiplication → unary ( ( "/" | "*" | "%" ) unary )* ;
 unary          → ( "!" | "-" | "++" | "--" ) unary
                | postfix ;
-postfix        → primary ( "++" | "--" )
-               | primary ( "(" arguments? ")" )* ;
+postfix        → ( call "." )? IDENTIFIER ( "++" | "--" )
+               | call
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER
+               | "this"
                | anonymous_fun
                | "(" expression ")"
 

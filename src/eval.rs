@@ -1,10 +1,11 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_natives, Function, LoxCallable};
+use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
+use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
-use crate::stmt::{Stmt, Visitor as StmtVisitor};
+use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -44,6 +45,9 @@ pub enum RuntimeError {
     UndefinedVariable(Loc, String),
     NotACallable(Loc, String),
     MismatchingArity(Loc, usize, usize),
+    NoProperties(Loc, String),
+    UndefinedProperty(Loc, String),
+    NoFields(Loc, String),
 }
 
 #[derive(Debug)]
@@ -65,7 +69,7 @@ impl Interpreter {
             locals: HashMap::new(),
         };
 
-        populate_natives(&mut inter);
+        populate_globals(&mut inter);
         inter
     }
 
@@ -136,6 +140,16 @@ impl Interpreter {
             self.globals.borrow_mut().define(name, val);
         }
     }
+
+    fn assign(&mut self, name: &str, val: Value, loc: Loc) -> Result<(), RuntimeError> {
+        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
+            self.local_env().borrow_mut().assign_at(depth, index, val);
+        } else {
+            self.globals.borrow_mut().assign(name, val, loc)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl GlobalEnviron {
@@ -196,7 +210,7 @@ impl Environ {
         unsafe { &*env }
     }
 
-    fn get_at(&self, distance: usize, index: usize) -> Value {
+    pub fn get_at(&self, distance: usize, index: usize) -> Value {
         self.ancestor(distance).values[index].clone()
     }
 
@@ -214,7 +228,7 @@ impl Environ {
         unsafe { &mut *env }
     }
 
-    fn assign_at(&mut self, distance: usize, index: usize, val: Value) {
+    pub fn assign_at(&mut self, distance: usize, index: usize, val: Value) {
         self.ancestor_mut(distance).values[index] = val;
     }
 }
@@ -312,15 +326,9 @@ impl ExprVisitor<Value> for Interpreter {
 
     fn visit_assign_expr(&mut self, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
         let val = self.evaluate(expr)?;
-        let cloned_val = val.clone();
+        self.assign(name, val.clone(), loc)?;
 
-        if let Some(ResolvedLocal { depth, index }) = self.get_resolved_local(name, loc) {
-            self.local_env().borrow_mut().assign_at(depth, index, val);
-        } else {
-            self.globals.borrow_mut().assign(name, val, loc)?;
-        }
-
-        Ok(cloned_val)
+        Ok(val)
     }
 
     fn visit_call_expr(&mut self, callee: &Expr, args: &[Expr], loc: Loc) -> ValueRes {
@@ -343,6 +351,33 @@ impl ExprVisitor<Value> for Interpreter {
         } else {
             Err(RuntimeError::not_a_callable(loc, callee))
         }
+    }
+
+    fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        let val_type = obj.get_type();
+        if let Some(instance) = obj.into_instance() {
+            ClassInstance::get(self, &instance, name)
+                .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, name)))
+        } else {
+            Err(RuntimeError::no_properties(loc, val_type))
+        }
+    }
+
+    fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        let val_type = obj.get_type();
+        if let Some(instance) = obj.into_instance() {
+            let val = self.evaluate(expr)?;
+            instance.borrow_mut().set(name, val.clone());
+            Ok(val)
+        } else {
+            Err(RuntimeError::no_fields(loc, val_type))
+        }
+    }
+
+    fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
+        self.look_up_variable(THIS_KEYWORD, loc)
     }
 }
 
@@ -411,10 +446,11 @@ impl StmtVisitor<()> for Interpreter {
         name: &str,
         params: &[Param],
         body: &[Stmt],
+        _kind: FunctionKind,
         _loc: Loc,
     ) -> ExecuteRes {
         let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
-        let function = Function::new(name, params, body, &self.env);
+        let function = Function::new(name, params, body, &self.env, false);
         self.define(name, function.into());
         Ok(())
     }
@@ -427,6 +463,37 @@ impl StmtVisitor<()> for Interpreter {
         };
 
         Err(RuntimeInterrupt::Return(ret_val))
+    }
+
+    fn visit_class_stmt(&mut self, name: &str, class_methods: &[Stmt], loc: Loc) -> ExecuteRes {
+        self.define(name, Value::Nil);
+
+        let mut methods = HashMap::new();
+        let mut getters = HashMap::new();
+        let mut static_methods = HashMap::new();
+
+        for stmt in class_methods {
+            match &stmt.kind {
+                StmtKind::Function(name, params, body, kind) => {
+                    let params: Vec<_> = params.iter().map(|p| p.kind.clone()).collect();
+                    let is_init = kind == &FunctionKind::Method && name == INIT_METHOD;
+                    let method = Function::new(name, params, body, &self.env, is_init).into();
+                    let name = name.clone();
+
+                    match kind {
+                        FunctionKind::Method => methods.insert(name, method),
+                        FunctionKind::Getter => getters.insert(name, method),
+                        FunctionKind::StaticMethod => static_methods.insert(name, method),
+                        FunctionKind::Function => unreachable!(),
+                    };
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        let class = Class::new(name, methods, getters, static_methods);
+        self.assign(name, Value::Callable(class.into()), loc)?;
+        Ok(())
     }
 
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
@@ -533,6 +600,7 @@ impl Value {
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
+            (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         })
     }
@@ -582,6 +650,18 @@ impl RuntimeError {
 
     fn mismatching_arity(loc: Loc, expected: usize, got: usize) -> Self {
         Self::MismatchingArity(loc, expected, got)
+    }
+
+    fn no_properties(loc: Loc, val_type: &str) -> Self {
+        Self::NoProperties(loc, String::from(val_type))
+    }
+
+    fn undefined_property(loc: Loc, name: &str) -> Self {
+        Self::UndefinedProperty(loc, String::from(name))
+    }
+
+    fn no_fields(loc: Loc, val_type: &str) -> Self {
+        Self::NoFields(loc, String::from(val_type))
     }
 }
 
