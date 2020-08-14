@@ -7,7 +7,7 @@ use crate::lexer::{
     TokenKind::{self, *},
 };
 use crate::location::Loc;
-use crate::stmt::Stmt;
+use crate::stmt::{FunctionKind, Stmt};
 
 pub struct Parser<'a> {
     input: &'a [Token<'a>],
@@ -130,7 +130,7 @@ impl<'a> Parser<'a> {
             self.var_declaration()
         } else if self.check(Fun) && self.check_next(Identifier) {
             self.advance();
-            self.function("function")
+            self.function(FunctionKind::Function)
         } else if self.matches(&[Class]).is_some() {
             self.class_declaration()
         } else {
@@ -286,16 +286,14 @@ impl<'a> Parser<'a> {
         Ok(Stmt::var(name.lexeme, init, *loc))
     }
 
-    fn function(&mut self, kind: &str) -> StmtParseRes {
-        let name = self.consume(Identifier, |p| p.expected_name_error(kind))?;
-        let params = self.function_params(&format!("{} name", kind))?;
+    fn function(&mut self, kind: FunctionKind) -> StmtParseRes {
+        let name = self.consume(Identifier, |p| p.expected_name_error(kind.to_string()))?;
+        let params = self.function_params(kind.name())?;
 
-        self.consume(LeftBrace, |p| {
-            p.expected_open_brace_error(&format!("{} body", kind))
-        })?;
+        self.consume(LeftBrace, |p| p.expected_open_brace_error(kind.body()))?;
         let body = self.block()?;
 
-        Ok(Stmt::function(name.lexeme, params, body, name.loc))
+        Ok(Stmt::function(name.lexeme, params, body, kind, name.loc))
     }
 
     fn function_params(&mut self, open_paren_after: &str) -> Result<Vec<Param>, ParsingError> {
@@ -330,18 +328,30 @@ impl<'a> Parser<'a> {
 
         self.consume(LeftBrace, |p| p.expected_open_brace_error("class body"))?;
         let mut methods = Vec::new();
-        let mut static_methods = Vec::new();
         while !self.check(RightBrace) && !self.is_at_end() {
-            if self.matches(&[Class]).is_some() {
-                static_methods.push(self.function("static method")?);
+            methods.push(if self.matches(&[Class]).is_some() {
+                self.function(FunctionKind::StaticMethod)?
+            } else if self.check(Identifier) && self.check_next(LeftBrace) {
+                self.getter_method()?
             } else {
-                methods.push(self.function("method")?);
-            }
+                self.function(FunctionKind::Method)?
+            })
         }
 
         self.consume(RightBrace, |p| p.expected_close_brace_error("class body"))?;
 
-        Ok(Stmt::class(name.lexeme, methods, static_methods, *loc))
+        Ok(Stmt::class(name.lexeme, methods, *loc))
+    }
+
+    fn getter_method(&mut self) -> StmtParseRes {
+        let kind = FunctionKind::Getter;
+        let name = self.consume(Identifier, |p| p.expected_name_error(kind.to_string()))?;
+
+        self.consume(LeftBrace, |p| p.expected_open_brace_error(kind.body()))?;
+        let body = self.block()?;
+        let params = Vec::new();
+
+        Ok(Stmt::function(name.lexeme, params, body, kind, name.loc))
     }
 
     fn expression_statement(&mut self) -> StmtParseRes {

@@ -35,6 +35,58 @@ fn test_duplicate_argument() {
 }
 
 #[test]
+fn test_duplicate_method() {
+    let input = r#"class MyClass {
+        method() {}
+        method(name) {}
+    }"#;
+    assert_eq!(
+        Err(ResolutionError::DuplicateMethod(
+            Loc::new(2, 8),
+            String::from("MyClass"),
+            String::from("a method"),
+            String::from("method")
+        )),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_duplicate_method_getter() {
+    let input = r#"class MyClass {
+        method {}
+        method(name) {}
+    }"#;
+    assert_eq!(
+        Err(ResolutionError::DuplicateMethod(
+            Loc::new(2, 8),
+            String::from("MyClass"),
+            String::from("a method"),
+            String::from("method")
+        )),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_duplicate_static_method() {
+    let input = r#"class MyClass {
+        method() { /* This shouldn't give an error */ }
+        class method() {}
+        class method(name) {}
+    }"#;
+    assert_eq!(
+        Err(ResolutionError::DuplicateMethod(
+            Loc::new(3, 14),
+            String::from("MyClass"),
+            String::from("a static method"),
+            String::from("method")
+        )),
+        resolve(input)
+    )
+}
+
+#[test]
 fn test_return_outside_fun() {
     let input = r#"return;"#;
     assert_eq!(

@@ -173,6 +173,11 @@ impl Display for ResolutionError {
                 "[{}] Duplicate argument '{}' in function definition",
                 loc, name
             ),
+            DuplicateMethod(loc, class_name, mtype, name) => write!(
+                f,
+                "[{}] Class '{}' already has {} called '{}'",
+                loc, class_name, mtype, name
+            ),
             ReturnOutsideFun(loc) => write!(f, "[{}] Cannot return from top-level code", loc),
             ThisOutsideClass(loc) => write!(f, "[{}] Cannot use 'this' outside of a class", loc),
             ReturnInInitializer(loc) => {

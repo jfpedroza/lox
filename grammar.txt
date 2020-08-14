@@ -11,7 +11,10 @@ funDecl        → "fun" function ;
 function       → IDENTIFIER "(" parameters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 
-classDecl      → "class" IDENTIFIER "{" function* "}" ;
+classDecl      → "class" IDENTIFIER "{" method* "}" ;
+method         → "class"? function
+               | getterMethod
+getterMethod   → IDENTIFIER block
 
 statement      → exprStmt
                | ifStmt
