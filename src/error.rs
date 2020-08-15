@@ -150,6 +150,11 @@ impl Display for RuntimeError {
             NoFields(loc, val_type) => {
                 write!(f, "[{}] Type '{}' doesn't have fields", loc, val_type)
             }
+            SuperclassIsNotClass(loc, val_type) => write!(
+                f,
+                "[{}] Superclass must be a class. Got '{}'",
+                loc, val_type
+            ),
         }
     }
 }
@@ -184,6 +189,11 @@ impl Display for ResolutionError {
                 write!(f, "[{}] Cannot return a value from an initializer", loc)
             }
             ThisInStaticMethod(loc) => write!(f, "[{}] Cannot use 'this' in a static method", loc),
+            ClassInheritsItself(loc, name) => write!(
+                f,
+                "[{}] [class {}] A class cannot inherit from itself",
+                loc, name
+            ),
             BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
             Multiple(errors) => {
                 let error_string: String =

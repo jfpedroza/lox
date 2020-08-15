@@ -48,6 +48,7 @@ pub enum RuntimeError {
     NoProperties(Loc, String),
     UndefinedProperty(Loc, String),
     NoFields(Loc, String),
+    SuperclassIsNotClass(Loc, String),
 }
 
 #[derive(Debug)]
@@ -465,7 +466,25 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
-    fn visit_class_stmt(&mut self, name: &str, class_methods: &[Stmt], loc: Loc) -> ExecuteRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        superclass: &Option<Expr>,
+        class_methods: &[Stmt],
+        loc: Loc,
+    ) -> ExecuteRes {
+        let superclass = if let Some(expr) = superclass {
+            let val = self.evaluate(expr)?;
+            let val_type = val.get_type();
+            if let Some(class) = val.into_class() {
+                Some(class)
+            } else {
+                return Err(RuntimeError::superclass_is_not_class(expr.loc, val_type).into());
+            }
+        } else {
+            None
+        };
+
         self.define(name, Value::Nil);
 
         let mut methods = HashMap::new();
@@ -491,7 +510,7 @@ impl StmtVisitor<()> for Interpreter {
             }
         }
 
-        let class = Class::new(name, methods, getters, static_methods);
+        let class = Class::new(name, superclass, methods, getters, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
@@ -662,6 +681,10 @@ impl RuntimeError {
 
     fn no_fields(loc: Loc, val_type: &str) -> Self {
         Self::NoFields(loc, String::from(val_type))
+    }
+
+    fn superclass_is_not_class(loc: Loc, val_type: &str) -> Self {
+        Self::SuperclassIsNotClass(loc, String::from(val_type))
     }
 }
 

@@ -4,7 +4,7 @@ mod tests;
 use crate::constants::{INIT_METHOD, THIS_KEYWORD};
 use crate::error::Warning;
 use crate::eval::Interpreter;
-use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, ExprKind, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use std::collections::HashMap;
@@ -52,6 +52,7 @@ pub enum ResolutionError {
     ThisOutsideClass(Loc),
     ReturnInInitializer(Loc),
     ThisInStaticMethod(Loc),
+    ClassInheritsItself(Loc, String),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -400,13 +401,32 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        superclass: &Option<Expr>,
+        methods: &[Stmt],
+        loc: Loc,
+    ) -> ResolveRes {
         use FunctionKind::*;
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
         self.declare_var(name, loc)?;
         self.define(name);
+
+        if let Some(superclass) = superclass {
+            match &superclass.kind {
+                ExprKind::Variable(supername) if supername == name => {
+                    self.errors
+                        .push(ResolutionError::class_inherits_itself(loc, name));
+                }
+                ExprKind::Variable(_supername) => {}
+                _ => unreachable!(),
+            }
+
+            self.resolve_expr(superclass)?;
+        }
 
         self.begin_scope();
         self.declare_define_this(loc);
@@ -501,5 +521,9 @@ impl ResolutionError {
             String::from(mtype),
             String::from(name),
         )
+    }
+
+    fn class_inherits_itself(loc: Loc, name: &str) -> Self {
+        Self::ClassInheritsItself(loc, String::from(name))
     }
 }

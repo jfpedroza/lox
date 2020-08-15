@@ -52,6 +52,7 @@ pub struct BoundMethod {
 #[derive(Debug)]
 pub struct Class {
     name: String,
+    superclass: Option<Rc<Class>>,
     methods: HashMap<String, Method>,
     getters: HashMap<String, Method>,
     is_meta: bool,
@@ -369,15 +370,18 @@ impl From<BoundMethod> for Callable {
 impl Class {
     pub fn new(
         name: &str,
+        superclass: Option<Rc<Class>>,
         methods: HashMap<String, Method>,
         getters: HashMap<String, Method>,
         static_methods: HashMap<String, Method>,
     ) -> Self {
-        let metaclass = Rc::new(Self::new_meta(name, static_methods));
+        let supermetaclass = superclass.as_ref().and_then(|sc| sc.metaclass());
+        let metaclass = Rc::new(Self::new_meta(name, supermetaclass, static_methods));
         let metainstance = ClassInstance::new(&metaclass).into();
 
         Self {
             name: String::from(name),
+            superclass,
             methods,
             getters,
             is_meta: false,
@@ -385,14 +389,25 @@ impl Class {
         }
     }
 
-    fn new_meta(name: &str, methods: HashMap<String, Method>) -> Self {
+    fn new_meta(
+        name: &str,
+        superclass: Option<Rc<Class>>,
+        methods: HashMap<String, Method>,
+    ) -> Self {
         Self {
             name: String::from(name),
+            superclass,
             methods,
             getters: HashMap::new(),
             is_meta: true,
             metainstance: None,
         }
+    }
+
+    fn metaclass(&self) -> Option<Rc<Class>> {
+        self.metainstance
+            .as_ref()
+            .map(|inst| Rc::clone(&inst.borrow().class))
     }
 
     fn add_native_method(&mut self, method: NativeMethod) {
@@ -401,11 +416,17 @@ impl Class {
     }
 
     fn find_method(&self, name: &str) -> Option<Method> {
-        self.methods.get(name).cloned()
+        self.methods
+            .get(name)
+            .cloned()
+            .or_else(|| self.superclass.as_ref().and_then(|sc| sc.find_method(name)))
     }
 
     fn find_getter(&self, name: &str) -> Option<Method> {
-        self.getters.get(name).cloned()
+        self.getters
+            .get(name)
+            .cloned()
+            .or_else(|| self.superclass.as_ref().and_then(|sc| sc.find_getter(name)))
     }
 }
 
@@ -518,7 +539,7 @@ fn define_class(globals: &mut GlobalEnviron, class: Class) {
 }
 
 fn make_map_class() -> Class {
-    let mut class = Class::new("Map", HashMap::new(), HashMap::new(), HashMap::new());
+    let mut class = Class::new("Map", None, HashMap::new(), HashMap::new(), HashMap::new());
 
     class.add_native_method(NativeMethod {
         name: "count",

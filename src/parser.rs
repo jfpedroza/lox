@@ -326,6 +326,13 @@ impl<'a> Parser<'a> {
         let Token { loc, .. } = self.previous();
         let name = self.consume(Identifier, |p| p.expected_name_error("class"))?;
 
+        let superclass = if self.matches(&[Less]).is_some() {
+            let supername = self.consume(Identifier, |p| p.expected_name_error("superclass"))?;
+            Some(Expr::variable(supername.lexeme, supername.loc))
+        } else {
+            None
+        };
+
         self.consume(LeftBrace, |p| p.expected_open_brace_error("class body"))?;
         let mut methods = Vec::new();
         while !self.check(RightBrace) && !self.is_at_end() {
@@ -340,7 +347,7 @@ impl<'a> Parser<'a> {
 
         self.consume(RightBrace, |p| p.expected_close_brace_error("class body"))?;
 
-        Ok(Stmt::class(name.lexeme, methods, *loc))
+        Ok(Stmt::class(name.lexeme, superclass, methods, *loc))
     }
 
     fn getter_method(&mut self) -> StmtParseRes {

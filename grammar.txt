@@ -11,7 +11,7 @@ funDecl        → "fun" function ;
 function       → IDENTIFIER "(" parameters? ")" block ;
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 
-classDecl      → "class" IDENTIFIER "{" method* "}" ;
+classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER )? "{" method* "}" ;
 method         → "class"? function
                | getterMethod
 getterMethod   → IDENTIFIER block
