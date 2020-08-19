@@ -1,4 +1,4 @@
-use crate::callable::{Callable, ClassInstance, InstanceRc, LoxCallable};
+use crate::callable::{Callable, Class, ClassInstance, InstanceRc, LoxCallable};
 use crate::expr::LitExpr;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -59,6 +59,13 @@ impl Value {
         match self {
             Instance(instance) => Some(instance),
             Callable(callable) => callable.into_instance(),
+            _ => None,
+        }
+    }
+
+    pub fn into_class(self) -> Option<Rc<Class>> {
+        match self {
+            Value::Callable(Callable::Class(class)) => Some(class),
             _ => None,
         }
     }

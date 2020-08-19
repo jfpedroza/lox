@@ -53,6 +53,7 @@ primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER
                | "this"
+               | "super" "." IDENTIFIER
                | anonymous_fun
                | "(" expression ")"
 

@@ -103,6 +103,9 @@ impl Display for ParsingError {
             ExpectedSemicolon(loc, after, got) => {
                 write!(f, "[{}] Expected ';' after {}. Got {}", loc, after, got)
             }
+            ExpectedDot(loc, after, got) => {
+                write!(f, "[{}] Expected '.' after {}. Got {}", loc, after, got)
+            }
             ExpectedName(loc, kind, got) => {
                 write!(f, "[{}] Expected {} name. Got {}", loc, kind, got)
             }
@@ -193,6 +196,12 @@ impl Display for ResolutionError {
                 f,
                 "[{}] [class {}] A class cannot inherit from itself",
                 loc, name
+            ),
+            SuperOutsideClass(loc) => write!(f, "[{}] Cannot use 'super' outside of a class", loc),
+            SuperNoInSubclass(loc) => write!(
+                f,
+                "[{}] Cannot use 'super' in a class with no superclass",
+                loc
             ),
             BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
             Multiple(errors) => {

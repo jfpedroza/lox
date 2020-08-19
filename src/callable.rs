@@ -428,6 +428,22 @@ impl Class {
             .cloned()
             .or_else(|| self.superclass.as_ref().and_then(|sc| sc.find_getter(name)))
     }
+
+    pub fn get_and_bind(
+        &self,
+        instance: &InstanceRc,
+        inter: &mut Interpreter,
+        name: &str,
+    ) -> Option<ValueRes> {
+        self.find_method(name)
+            .map(|m| Method::bind(m, instance).into())
+            .map(Ok)
+            .or_else(|| {
+                self.find_getter(name)
+                    .map(|m| Method::bind(m, instance))
+                    .map(|m| m.call(inter, Vec::new()))
+            })
+    }
 }
 
 impl LoxCallable for Rc<Class> {
@@ -477,17 +493,10 @@ impl ClassInstance {
     pub fn get(inter: &mut Interpreter, instance: &InstanceRc, name: &str) -> Option<ValueRes> {
         let field = { instance.borrow().fields.get(name).cloned().map(Ok) };
 
-        field
-            .or_else(|| {
-                let method = { instance.borrow().class.find_method(name) };
-                method.map(|m| Method::bind(m, instance).into()).map(Ok)
-            })
-            .or_else(|| {
-                let getter = { instance.borrow().class.find_getter(name) };
-                getter
-                    .map(|m| Method::bind(m, instance))
-                    .map(|m| m.call(inter, Vec::new()))
-            })
+        field.or_else(|| {
+            let class = Rc::clone(&instance.borrow().class);
+            class.get_and_bind(instance, inter, name)
+        })
     }
 
     pub fn set(&mut self, name: &str, val: Value) {

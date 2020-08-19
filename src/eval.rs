@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
-use crate::constants::{INIT_METHOD, THIS_KEYWORD};
+use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
@@ -150,6 +150,12 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn enclosing_env(&self) -> Option<Env> {
+        self.env
+            .as_ref()
+            .and_then(|env| env.borrow().enclosing.as_ref().map(Rc::clone))
     }
 }
 
@@ -380,6 +386,16 @@ impl ExprVisitor<Value> for Interpreter {
     fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
         self.look_up_variable(THIS_KEYWORD, loc)
     }
+
+    fn visit_super_expr(&mut self, method: &str, loc: Loc) -> ValueRes {
+        let superval = self.look_up_variable(SUPER_KEYWORD, loc)?;
+        let superclass = superval.into_class().unwrap();
+        let obj_val = self.look_up_variable(THIS_KEYWORD, loc)?;
+        let obj = obj_val.into_instance().unwrap();
+        superclass
+            .get_and_bind(&obj, self, method)
+            .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, method)))
+    }
 }
 
 impl StmtVisitor<()> for Interpreter {
@@ -487,6 +503,11 @@ impl StmtVisitor<()> for Interpreter {
 
         self.define(name, Value::Nil);
 
+        if let Some(sc) = &superclass {
+            self.env = Some(Environ::with_enclosing(&self.env));
+            self.define(SUPER_KEYWORD, Rc::clone(sc).into());
+        }
+
         let mut methods = HashMap::new();
         let mut getters = HashMap::new();
         let mut static_methods = HashMap::new();
@@ -508,6 +529,10 @@ impl StmtVisitor<()> for Interpreter {
                 }
                 _ => unreachable!(),
             }
+        }
+
+        if superclass.is_some() {
+            self.env = self.enclosing_env();
         }
 
         let class = Class::new(name, superclass, methods, getters, static_methods);

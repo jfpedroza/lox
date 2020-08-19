@@ -19,6 +19,7 @@ pub enum ExprKind {
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
     This,
+    Super(String),
 }
 
 pub type Expr = Located<ExprKind>;
@@ -68,6 +69,8 @@ pub trait Visitor<Res> {
     fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
 
     fn visit_this_expr(&mut self, loc: Loc) -> Self::Result;
+
+    fn visit_super_expr(&mut self, method: &str, loc: Loc) -> Self::Result;
 }
 
 impl Expr {
@@ -149,6 +152,10 @@ impl Expr {
         Expr::new(ExprKind::This, loc)
     }
 
+    pub fn super_expr(method: &str, loc: Loc) -> Self {
+        Expr::new(ExprKind::Super(String::from(method)), loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -169,6 +176,7 @@ impl Expr {
             Get(obj, name) => visitor.visit_get_expr(obj, name, self.loc),
             Set(obj, name, expr) => visitor.visit_set_expr(obj, name, expr, self.loc),
             This => visitor.visit_this_expr(self.loc),
+            Super(method) => visitor.visit_super_expr(method, self.loc),
         }
     }
 }
@@ -197,6 +205,7 @@ impl Debug for ExprKind {
             Get(obj, name) => format!("(get {:?} {})", obj, name),
             Set(obj, name, expr) => format!("(set {:?} {} {:?})", obj, name, expr),
             This => String::from("this"),
+            Super(method) => format!("(super {})", method),
         };
 
         write!(f, "{}", string)

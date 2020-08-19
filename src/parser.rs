@@ -26,6 +26,7 @@ pub enum ParsingError {
     ExpectedCloseBrace(Loc, String, String),
     ExpectedColon(Loc, String),
     ExpectedSemicolon(Loc, String, String),
+    ExpectedDot(Loc, String, String),
     ExpectedName(Loc, String, String),
     InvalidAssignmentTarget(Loc),
     MaximumArgumentsExceeded(Loc, String),
@@ -602,7 +603,7 @@ impl<'a> Parser<'a> {
 
     fn primary(&mut self) -> ExprParseRes {
         let primary_tokens = [
-            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, This, Fun,
+            False, True, Nil, Integer, Float, Str, LeftParen, Identifier, This, Super, Fun,
         ];
         let token = self
             .matches(&primary_tokens)
@@ -623,6 +624,12 @@ impl<'a> Parser<'a> {
             }
             Identifier => Expr::variable(token.lexeme, token.loc),
             This => Expr::this(token.loc),
+            Super => {
+                self.consume(Dot, |p| p.expected_dot_error("'super'"))?;
+                let method =
+                    self.consume(Identifier, |p| p.expected_name_error("superclass method"))?;
+                Expr::super_expr(method.lexeme, token.loc)
+            }
             Fun => self.anon_function()?,
             kind => panic!("Shouldn't have executed this. Kind: {:?}", kind),
         })
@@ -690,6 +697,11 @@ impl<'a> Parser<'a> {
     fn expected_semicolon_error(&self, after: &str) -> ParsingError {
         let token = self.peek();
         ParsingError::ExpectedSemicolon(token.loc, String::from(after), token.lexeme.to_string())
+    }
+
+    fn expected_dot_error(&self, after: &str) -> ParsingError {
+        let token = self.peek();
+        ParsingError::ExpectedDot(token.loc, String::from(after), token.lexeme.to_string())
     }
 
     fn expected_name_error(&self, kind: &str) -> ParsingError {
