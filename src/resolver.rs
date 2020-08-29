@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod tests;
 
-use crate::constants::{INIT_METHOD, THIS_KEYWORD};
+use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::error::Warning;
 use crate::eval::Interpreter;
-use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
+use crate::expr::{BinOp, Expr, ExprKind, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use std::collections::HashMap;
@@ -40,6 +40,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 #[derive(Debug, PartialEq, Fail)]
@@ -52,6 +53,9 @@ pub enum ResolutionError {
     ThisOutsideClass(Loc),
     ReturnInInitializer(Loc),
     ThisInStaticMethod(Loc),
+    ClassInheritsItself(Loc, String),
+    SuperOutsideClass(Loc),
+    SuperNoInSubclass(Loc),
     BreakOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
@@ -162,10 +166,10 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn declare_define_this(&mut self, loc: Loc) {
+    fn declare_define_special(&mut self, keyword: &str, loc: Loc) {
         let scope = self.scopes.last_mut().unwrap();
         scope.insert(
-            String::from(THIS_KEYWORD),
+            String::from(keyword),
             ResolvedVar {
                 loc,
                 index: scope.len(),
@@ -314,6 +318,19 @@ impl ExprVisitor<()> for Resolver<'_> {
 
         Ok(())
     }
+
+    fn visit_super_expr(&mut self, _method: &str, loc: Loc) -> ResolveRes {
+        match self.current_class {
+            ClassType::None => self.errors.push(ResolutionError::SuperOutsideClass(loc)),
+            ClassType::Class => self.errors.push(ResolutionError::SuperNoInSubclass(loc)),
+            ClassType::Subclass => {
+                self.resolve_local(SUPER_KEYWORD, loc, true);
+                self.resolve_local(THIS_KEYWORD, loc, true);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl StmtVisitor<()> for Resolver<'_> {
@@ -400,7 +417,13 @@ impl StmtVisitor<()> for Resolver<'_> {
         Ok(())
     }
 
-    fn visit_class_stmt(&mut self, name: &str, methods: &[Stmt], loc: Loc) -> ResolveRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        superclass: &Option<Expr>,
+        methods: &[Stmt],
+        loc: Loc,
+    ) -> ResolveRes {
         use FunctionKind::*;
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
@@ -408,8 +431,26 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.declare_var(name, loc)?;
         self.define(name);
 
+        if let Some(superclass) = superclass {
+            match &superclass.kind {
+                ExprKind::Variable(supername) if supername == name => {
+                    self.errors
+                        .push(ResolutionError::class_inherits_itself(loc, name));
+                }
+                ExprKind::Variable(_supername) => {}
+                _ => unreachable!(),
+            }
+
+            self.current_class = ClassType::Subclass;
+
+            self.resolve_expr(superclass)?;
+
+            self.begin_scope();
+            self.declare_define_special(SUPER_KEYWORD, superclass.loc);
+        }
+
         self.begin_scope();
-        self.declare_define_this(loc);
+        self.declare_define_special(THIS_KEYWORD, loc);
 
         let mut method_names = Vec::new();
         let mut static_method_names = Vec::new();
@@ -458,6 +499,10 @@ impl StmtVisitor<()> for Resolver<'_> {
 
         self.end_scope();
 
+        if superclass.is_some() {
+            self.end_scope();
+        }
+
         self.resolve_local(name, loc, false);
 
         self.current_class = enclosing_class;
@@ -501,5 +546,9 @@ impl ResolutionError {
             String::from(mtype),
             String::from(name),
         )
+    }
+
+    fn class_inherits_itself(loc: Loc, name: &str) -> Self {
+        Self::ClassInheritsItself(loc, String::from(name))
     }
 }
