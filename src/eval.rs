@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
-use crate::constants::{INIT_METHOD, THIS_KEYWORD};
+use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
@@ -48,6 +48,7 @@ pub enum RuntimeError {
     NoProperties(Loc, String),
     UndefinedProperty(Loc, String),
     NoFields(Loc, String),
+    SuperclassIsNotClass(Loc, String),
 }
 
 #[derive(Debug)]
@@ -149,6 +150,12 @@ impl Interpreter {
         }
 
         Ok(())
+    }
+
+    fn enclosing_env(&self) -> Option<Env> {
+        self.env
+            .as_ref()
+            .and_then(|env| env.borrow().enclosing.as_ref().map(Rc::clone))
     }
 }
 
@@ -379,6 +386,16 @@ impl ExprVisitor<Value> for Interpreter {
     fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
         self.look_up_variable(THIS_KEYWORD, loc)
     }
+
+    fn visit_super_expr(&mut self, method: &str, loc: Loc) -> ValueRes {
+        let superval = self.look_up_variable(SUPER_KEYWORD, loc)?;
+        let superclass = superval.into_class().unwrap();
+        let obj_val = self.look_up_variable(THIS_KEYWORD, loc)?;
+        let obj = obj_val.into_instance().unwrap();
+        superclass
+            .get_and_bind(&obj, self, method)
+            .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, method)))
+    }
 }
 
 impl StmtVisitor<()> for Interpreter {
@@ -465,8 +482,31 @@ impl StmtVisitor<()> for Interpreter {
         Err(RuntimeInterrupt::Return(ret_val))
     }
 
-    fn visit_class_stmt(&mut self, name: &str, class_methods: &[Stmt], loc: Loc) -> ExecuteRes {
+    fn visit_class_stmt(
+        &mut self,
+        name: &str,
+        superclass: &Option<Expr>,
+        class_methods: &[Stmt],
+        loc: Loc,
+    ) -> ExecuteRes {
+        let superclass = if let Some(expr) = superclass {
+            let val = self.evaluate(expr)?;
+            let val_type = val.get_type();
+            if let Some(class) = val.into_class() {
+                Some(class)
+            } else {
+                return Err(RuntimeError::superclass_is_not_class(expr.loc, val_type).into());
+            }
+        } else {
+            None
+        };
+
         self.define(name, Value::Nil);
+
+        if let Some(sc) = &superclass {
+            self.env = Some(Environ::with_enclosing(&self.env));
+            self.define(SUPER_KEYWORD, Rc::clone(sc).into());
+        }
 
         let mut methods = HashMap::new();
         let mut getters = HashMap::new();
@@ -491,7 +531,11 @@ impl StmtVisitor<()> for Interpreter {
             }
         }
 
-        let class = Class::new(name, methods, getters, static_methods);
+        if superclass.is_some() {
+            self.env = self.enclosing_env();
+        }
+
+        let class = Class::new(name, superclass, methods, getters, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
@@ -662,6 +706,10 @@ impl RuntimeError {
 
     fn no_fields(loc: Loc, val_type: &str) -> Self {
         Self::NoFields(loc, String::from(val_type))
+    }
+
+    fn superclass_is_not_class(loc: Loc, val_type: &str) -> Self {
+        Self::SuperclassIsNotClass(loc, String::from(val_type))
     }
 }
 
