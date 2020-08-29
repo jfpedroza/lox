@@ -821,6 +821,66 @@ fn test_class_getter_init() {
 }
 
 #[test]
+fn test_class_inheritance() {
+    let input = r#"
+    class Rectangle {
+        init(x, y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        area { return this.x * this.x; }
+    }
+
+    class Square < Rectangle {
+        init(x) {
+            super.init(x, x);
+        }
+    }
+
+    var square = Square(3);
+    var x = square.x;
+    var area = square.area;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(9.into()), env_get(&inter, "area"));
+}
+
+#[test]
+fn test_class_inheritance_method_shadowing() {
+    let input = r#"
+    class A {
+        init() {
+            this.x = "";
+        }
+
+        method() {
+            this.x += "A";
+        }
+    }
+
+    class B < A {
+        method() {
+            this.x += "B";
+        }
+    }
+
+    var a = A();
+    a.method();
+    var a_x = a.x;
+    var b = B();
+    b.method();
+    var b_x = b.x;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("A".into()), env_get(&inter, "a_x"));
+    assert_eq!(Ok("B".into()), env_get(&inter, "b_x"));
+}
+
+#[test]
 fn test_undefined_variable() {
     let input = r#"hello;"#;
     let (stmts, mut inter) = get_stmts(input);
@@ -915,6 +975,22 @@ fn test_no_fields() {
     let (stmts, mut inter) = get_stmts(input);
     assert_eq!(
         Err(RuntimeError::NoFields(Loc::new(0, 1), String::from(INT))),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_superclass_is_not_class() {
+    let input = r#"
+    var A = "a";
+    class B < A {}
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::SuperclassIsNotClass(
+            Loc::new(2, 14),
+            String::from(STRING)
+        )),
         inter.interpret(&stmts)
     );
 }

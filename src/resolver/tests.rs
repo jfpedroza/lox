@@ -120,7 +120,7 @@ fn test_return_in_initializer() {
 }
 
 #[test]
-fn test_return_in_static_method() {
+fn test_this_in_static_method() {
     let input = r#"
     class MyClass {
         class method() {
@@ -130,6 +130,42 @@ fn test_return_in_static_method() {
     "#;
     assert_eq!(
         Err(ResolutionError::ThisInStaticMethod(Loc::new(3, 18))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_class_inherits_from_itself() {
+    let input = r#"class MyClass < MyClass {}"#;
+    assert_eq!(
+        Err(ResolutionError::ClassInheritsItself(
+            Loc::new(0, 0),
+            String::from("MyClass")
+        )),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_super_outside_class() {
+    let input = r#"super.method();"#;
+    assert_eq!(
+        Err(ResolutionError::SuperOutsideClass(Loc::new(0, 0))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_super_not_in_subclass() {
+    let input = r#"
+    class MyClass {
+        method() {
+            super.method();
+        }
+    }
+    "#;
+    assert_eq!(
+        Err(ResolutionError::SuperNoInSubclass(Loc::new(3, 12))),
         resolve(input)
     )
 }
