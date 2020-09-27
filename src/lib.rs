@@ -8,6 +8,7 @@ extern crate failure;
 extern crate failure_derive;
 
 mod callable;
+mod class;
 mod constants;
 pub mod error;
 mod eval;

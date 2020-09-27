@@ -1,7 +1,8 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
+use crate::callable::{define_native_functions, Function, LoxCallable};
+use crate::class::{define_native_classes, Class, ClassInstance};
 use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
@@ -70,7 +71,7 @@ impl Interpreter {
             locals: HashMap::new(),
         };
 
-        populate_globals(&mut inter);
+        inter.populate_globals();
         inter
     }
 
@@ -156,6 +157,12 @@ impl Interpreter {
         self.env
             .as_ref()
             .and_then(|env| env.borrow().enclosing.as_ref().map(Rc::clone))
+    }
+
+    fn populate_globals(&mut self) {
+        let mut globals = self.globals.borrow_mut();
+        define_native_classes(&mut globals);
+        define_native_functions(&mut globals);
     }
 }
 

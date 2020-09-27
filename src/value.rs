@@ -1,4 +1,5 @@
-use crate::callable::{Callable, Class, ClassInstance, InstanceRc, LoxCallable};
+use crate::callable::{Callable, LoxCallable};
+use crate::class::{Class, ClassInstance, InstanceRc};
 use crate::expr::LitExpr;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
