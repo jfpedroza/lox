@@ -307,6 +307,10 @@ impl ExprVisitor<()> for Resolver<'_> {
         self.resolve_expr(obj)
     }
 
+    fn visit_array_expr(&mut self, elements: &[Expr], _loc: Loc) -> ResolveRes {
+        self.resolve_exprs(elements)
+    }
+
     fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {
         if self.current_class == ClassType::None {
             self.errors.push(ResolutionError::ThisOutsideClass(loc));

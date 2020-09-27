@@ -7,6 +7,7 @@ extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 
+mod array;
 mod callable;
 mod class;
 mod constants;
@@ -24,6 +25,7 @@ mod utils;
 mod value;
 
 use ansi_term::Color::{Blue, Cyan, Green, Purple, Yellow};
+use ansi_term::Style;
 use error::print_err;
 use eval::Interpreter;
 use failure::{Fallible, ResultExt};
@@ -130,18 +132,9 @@ impl Lox {
                     ..
                 } => {
                     let val = self.inter.evaluate(expr)?;
-                    let output = match val {
-                        Value::Integer(int) => Blue.paint(int.to_string()),
-                        Value::Float(float) => Cyan.paint(float.to_string()),
-                        Value::Str(string) => {
-                            Green.paint(format!("\"{}\"", utils::escape_string(&string)))
-                        }
-                        Value::Boolean(boolean) => Purple.paint(boolean.to_string()),
-                        Value::Nil => Purple.paint("nil"),
-                        Value::Callable(callable) => Yellow.paint(callable.to_string()),
-                        Value::Instance(instance) => Yellow.paint(instance.borrow().to_string()),
-                    };
-                    println!("=> {}", output);
+                    print!("=> ");
+                    print_value(&val);
+                    println!();
                 }
                 _ => {
                     self.inter.interpret(&stmts)?;
@@ -153,4 +146,30 @@ impl Lox {
 
         Ok(())
     }
+}
+
+fn print_value(val: &Value) {
+    let output = match val {
+        Value::Integer(int) => Blue.paint(int.to_string()),
+        Value::Float(float) => Cyan.paint(float.to_string()),
+        Value::Str(string) => Green.paint(format!("\"{}\"", utils::escape_string(&string))),
+        Value::Boolean(boolean) => Purple.paint(boolean.to_string()),
+        Value::Nil => Purple.paint("nil"),
+        Value::Callable(callable) => Yellow.paint(callable.to_string()),
+        Value::Instance(instance) => Yellow.paint(instance.borrow().to_string()),
+        Value::Array(array) => {
+            let len = array.borrow().len();
+            print!("[");
+            for (i, el) in array.borrow().iter().enumerate() {
+                print_value(el);
+                if i < len - 1 {
+                    print!(", ");
+                }
+            }
+
+            Style::new().paint("]")
+        }
+    };
+
+    print!("{}", output);
 }

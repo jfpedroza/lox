@@ -18,6 +18,7 @@ pub enum ExprKind {
     Call(Box<Expr>, Vec<Expr>),
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
+    Array(Vec<Expr>),
     This,
     Super(String),
 }
@@ -67,6 +68,8 @@ pub trait Visitor<Res> {
     fn visit_get_expr(&mut self, obj: &Expr, name: &str, loc: Loc) -> Self::Result;
 
     fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_array_expr(&mut self, elements: &[Expr], loc: Loc) -> Self::Result;
 
     fn visit_this_expr(&mut self, loc: Loc) -> Self::Result;
 
@@ -148,6 +151,10 @@ impl Expr {
         Expr::new(ExprKind::Set(obj, name, Box::new(expr)), loc)
     }
 
+    pub fn array(elements: Vec<Expr>, loc: Loc) -> Self {
+        Expr::new(ExprKind::Array(elements), loc)
+    }
+
     pub fn this(loc: Loc) -> Self {
         Expr::new(ExprKind::This, loc)
     }
@@ -175,6 +182,7 @@ impl Expr {
             Call(callee, args) => visitor.visit_call_expr(callee, args, self.loc),
             Get(obj, name) => visitor.visit_get_expr(obj, name, self.loc),
             Set(obj, name, expr) => visitor.visit_set_expr(obj, name, expr, self.loc),
+            Array(elements) => visitor.visit_array_expr(elements, self.loc),
             This => visitor.visit_this_expr(self.loc),
             Super(method) => visitor.visit_super_expr(method, self.loc),
         }
@@ -204,6 +212,7 @@ impl Debug for ExprKind {
             Call(callee, args) => format!("(call {:?} {:?})", callee, args),
             Get(obj, name) => format!("(get {:?} {})", obj, name),
             Set(obj, name, expr) => format!("(set {:?} {} {:?})", obj, name, expr),
+            Array(elements) => format!("(array {:?})", elements),
             This => String::from("this"),
             Super(method) => format!("(super {})", method),
         };

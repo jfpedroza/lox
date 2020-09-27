@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::array::Array;
 use crate::callable::{define_native_functions, Function, LoxCallable};
 use crate::class::{define_native_classes, Class, ClassInstance};
 use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
@@ -390,6 +391,16 @@ impl ExprVisitor<Value> for Interpreter {
         }
     }
 
+    fn visit_array_expr(&mut self, elements: &[Expr], _loc: Loc) -> ValueRes {
+        let elements: Vec<_> = elements
+            .iter()
+            .map(|a| self.evaluate(a))
+            .collect::<Result<_, _>>()?;
+
+        let array = Array::new(elements);
+        Ok(array.into())
+    }
+
     fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
         self.look_up_variable(THIS_KEYWORD, loc)
     }
@@ -652,6 +663,7 @@ impl Value {
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
             (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
+            (Array(left), Array(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         })
     }

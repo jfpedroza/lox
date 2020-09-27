@@ -1,3 +1,4 @@
+use crate::array::{Array, ArrayRc};
 use crate::callable::{Callable, LoxCallable};
 use crate::class::{Class, ClassInstance, InstanceRc};
 use crate::expr::LitExpr;
@@ -14,6 +15,7 @@ pub enum Value {
     Nil,
     Callable(Callable),
     Instance(InstanceRc),
+    Array(ArrayRc),
 }
 
 pub mod types {
@@ -23,6 +25,7 @@ pub mod types {
     pub const BOOL: &str = "bool";
     pub const NIL: &str = "nil";
     pub const INSTANCE: &str = "instance";
+    pub const ARRAY: &str = "array";
 }
 
 impl Value {
@@ -52,6 +55,7 @@ impl Value {
             Nil => types::NIL,
             Callable(callable) => callable.get_type(),
             Instance(_) => types::INSTANCE,
+            Array(_) => types::ARRAY,
         }
     }
 
@@ -127,6 +131,12 @@ impl From<ClassInstance> for Value {
     }
 }
 
+impl From<Array> for Value {
+    fn from(input: Array) -> Self {
+        Value::Array(Rc::new(RefCell::new(input)))
+    }
+}
+
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(input: Option<T>) -> Self {
         match input {
@@ -147,6 +157,7 @@ impl Display for Value {
             Nil => write!(f, "nil"),
             Callable(callable) => callable.fmt(f),
             Instance(instance) => instance.borrow().fmt(f),
+            Array(array) => array.borrow().fmt(f),
         }
     }
 }
@@ -161,7 +172,7 @@ impl PartialEq for Value {
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
-            (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
+            (Array(left), Array(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         }
     }
