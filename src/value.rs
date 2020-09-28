@@ -31,10 +31,7 @@ pub mod types {
 impl Value {
     pub fn is_truthy(&self) -> bool {
         use Value::*;
-        match self {
-            Nil | Boolean(false) => false,
-            _ => true,
-        }
+        !matches!(self, Nil | Boolean(false))
     }
 
     pub fn number(&self) -> Option<f64> {

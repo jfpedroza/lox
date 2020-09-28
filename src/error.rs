@@ -167,6 +167,9 @@ impl Display for RuntimeError {
                 "[{}] Superclass must be a class. Got '{}'",
                 loc, val_type
             ),
+            IndexOutOfBounds(loc, index, size) => {
+                write!(f, "[{}] Index {} out of bounds. Size {}", loc, index, size)
+            }
         }
     }
 }

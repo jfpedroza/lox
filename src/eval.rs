@@ -52,6 +52,7 @@ pub enum RuntimeError {
     NoFields(Loc, String),
     SuperclassIsNotClass(Loc, String),
     ExpectedType(Loc, String, String),
+    IndexOutOfBounds(Loc, i64, usize),
 }
 
 #[derive(Debug)]
