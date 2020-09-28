@@ -42,8 +42,11 @@ fn is_syntax_err(err: &Error) -> bool {
 fn error_type(err: &Error) -> &'static str {
     if is_syntax_err(err) {
         "SyntaxError"
-    } else if is_type::<RuntimeError>(err) {
-        "RuntimeError"
+    } else if let Some(err) = err.downcast_ref::<RuntimeError>() {
+        match err {
+            RuntimeError::ExpectedType(_, _, _) => "TypeError",
+            _ => "RuntimeError",
+        }
     } else {
         "Error"
     }
@@ -155,6 +158,9 @@ impl Display for RuntimeError {
             UndefinedProperty(loc, name) => write!(f, "[{}] Undefined property '{}'", loc, name),
             NoFields(loc, val_type) => {
                 write!(f, "[{}] Type '{}' doesn't have fields", loc, val_type)
+            }
+            ExpectedType(loc, expected, got) => {
+                write!(f, "[{}] Expected type '{}'. Got '{}'", loc, expected, got)
             }
             SuperclassIsNotClass(loc, val_type) => write!(
                 f,

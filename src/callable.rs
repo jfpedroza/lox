@@ -1,5 +1,6 @@
 use crate::class::{BoundMethod, Class, InstanceRc};
 use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
+use crate::location::Loc;
 use crate::stmt::Stmt;
 use crate::value::Value;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
@@ -18,6 +19,7 @@ pub enum Callable {
 pub enum NativeFunction {
     Clock,
     Str,
+    ArrayLen,
 }
 
 #[derive(Debug)]
@@ -37,7 +39,7 @@ pub mod types {
 
 pub trait LoxCallable: Into<Callable> {
     fn arity(&self) -> usize;
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes;
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes;
 }
 
 impl Callable {
@@ -82,13 +84,13 @@ impl LoxCallable for Callable {
         }
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
         use Callable::*;
         match self {
-            Native(function) => function.call(inter, args),
-            Function(function) => function.call(inter, args),
-            BoundMethod(method) => method.call(inter, args),
-            Class(class) => class.call(inter, args),
+            Native(function) => function.call(inter, args, loc),
+            Function(function) => function.call(inter, args, loc),
+            BoundMethod(method) => method.call(inter, args, loc),
+            Class(class) => class.call(inter, args, loc),
         }
     }
 }
@@ -112,6 +114,7 @@ impl NativeFunction {
         match self {
             Clock => "clock",
             Str => "str",
+            ArrayLen => "array_len",
         }
     }
 }
@@ -122,14 +125,17 @@ impl LoxCallable for NativeFunction {
         match self {
             Clock => 0,
             Str => 1,
+            ArrayLen => 1,
         }
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
+        use crate::array::functions::*;
         use NativeFunction::*;
         match self {
-            Clock => clock(inter, args),
-            Str => val_to_str(inter, args),
+            Clock => clock(inter, args, loc),
+            Str => val_to_str(inter, args, loc),
+            ArrayLen => array_len(inter, args, loc),
         }
     }
 }
@@ -177,6 +183,7 @@ impl Function {
         &self,
         inter: &mut Interpreter,
         args: Vec<Value>,
+        _loc: Loc,
         closure: &Option<Env>,
     ) -> ValueRes {
         let env = Environ::with_enclosing(closure);
@@ -209,8 +216,8 @@ impl LoxCallable for Function {
         self.params.len()
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
-        self.call_with_closure(inter, args, &self.closure)
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
+        self.call_with_closure(inter, args, loc, &self.closure)
     }
 }
 
@@ -250,13 +257,14 @@ impl From<Rc<Class>> for Callable {
 pub fn define_native_functions(globals: &mut GlobalEnviron) {
     define_native(globals, NativeFunction::Clock);
     define_native(globals, NativeFunction::Str);
+    define_native(globals, NativeFunction::ArrayLen);
 }
 
 fn define_native(globals: &mut GlobalEnviron, function: NativeFunction) {
     globals.define(function.name(), function.into());
 }
 
-fn clock(_inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
+fn clock(_inter: &mut Interpreter, _args: Vec<Value>, _loc: Loc) -> ValueRes {
     let start = SystemTime::now();
     let since_the_epoch = start
         .duration_since(UNIX_EPOCH)
@@ -266,7 +274,7 @@ fn clock(_inter: &mut Interpreter, _args: Vec<Value>) -> ValueRes {
     Ok(in_ms.into())
 }
 
-fn val_to_str(_inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+fn val_to_str(_inter: &mut Interpreter, args: Vec<Value>, _loc: Loc) -> ValueRes {
     let value = args.first().unwrap();
     Ok(value.to_string().into())
 }

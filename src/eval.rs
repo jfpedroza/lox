@@ -51,6 +51,7 @@ pub enum RuntimeError {
     UndefinedProperty(Loc, String),
     NoFields(Loc, String),
     SuperclassIsNotClass(Loc, String),
+    ExpectedType(Loc, String, String),
 }
 
 #[derive(Debug)]
@@ -355,7 +356,7 @@ impl ExprVisitor<Value> for Interpreter {
 
         if let Value::Callable(callable) = callee {
             if args.len() == callable.arity() {
-                callable.call(self, args)
+                callable.call(self, args, loc)
             } else {
                 Err(RuntimeError::mismatching_arity(
                     loc,
@@ -372,7 +373,7 @@ impl ExprVisitor<Value> for Interpreter {
         let obj = self.evaluate(obj)?;
         let val_type = obj.get_type();
         if let Some(instance) = obj.into_instance() {
-            ClassInstance::get(self, &instance, name)
+            ClassInstance::get(self, &instance, name, loc)
                 .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, name)))
         } else {
             Err(RuntimeError::no_properties(loc, val_type))
@@ -384,7 +385,7 @@ impl ExprVisitor<Value> for Interpreter {
         let val_type = obj.get_type();
         if let Some(instance) = obj.into_instance() {
             let val = self.evaluate(expr)?;
-            instance.borrow_mut().set(name, val.clone());
+            instance.borrow_mut().set(name, val.clone(), loc);
             Ok(val)
         } else {
             Err(RuntimeError::no_fields(loc, val_type))
@@ -411,7 +412,7 @@ impl ExprVisitor<Value> for Interpreter {
         let obj_val = self.look_up_variable(THIS_KEYWORD, loc)?;
         let obj = obj_val.into_instance().unwrap();
         superclass
-            .get_and_bind(&obj, self, method)
+            .get_and_bind(&obj, self, method, loc)
             .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, method)))
     }
 }
@@ -729,6 +730,10 @@ impl RuntimeError {
 
     fn superclass_is_not_class(loc: Loc, val_type: &str) -> Self {
         Self::SuperclassIsNotClass(loc, String::from(val_type))
+    }
+
+    pub fn expected_type(loc: Loc, expected: &str, got: Value) -> Self {
+        Self::ExpectedType(loc, String::from(expected), String::from(got.get_type()))
     }
 }
 

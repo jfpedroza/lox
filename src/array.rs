@@ -38,3 +38,19 @@ impl Display for Array {
         write!(f, "]")
     }
 }
+
+pub mod functions {
+    use crate::eval::{Interpreter, RuntimeError, ValueRes};
+    use crate::location::Loc;
+    use crate::value::{types::ARRAY, Value};
+
+    pub fn array_len(_inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
+        let arg = args.pop().unwrap();
+        if let Value::Array(array) = arg {
+            let len = array.borrow().len();
+            Ok(Value::Integer(len as i64))
+        } else {
+            Err(RuntimeError::expected_type(loc, ARRAY, arg))
+        }
+    }
+}

@@ -1,6 +1,7 @@
 use crate::callable::{Callable, Function, LoxCallable};
 use crate::constants::INIT_METHOD;
 use crate::eval::{Environ, GlobalEnviron, Interpreter, ValueRes};
+use crate::location::Loc;
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -34,7 +35,7 @@ pub enum Method {
 pub struct NativeMethod {
     name: &'static str,
     arity: usize,
-    fun: fn(&mut Interpreter, Vec<Value>, &mut ClassInstance) -> ValueRes,
+    fun: fn(&mut Interpreter, Vec<Value>, &mut ClassInstance, Loc) -> ValueRes,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +111,7 @@ impl Class {
         instance: &InstanceRc,
         inter: &mut Interpreter,
         name: &str,
+        loc: Loc,
     ) -> Option<ValueRes> {
         self.find_method(name)
             .map(|m| Method::bind(m, instance).into())
@@ -117,7 +119,7 @@ impl Class {
             .or_else(|| {
                 self.find_getter(name)
                     .map(|m| Method::bind(m, instance))
-                    .map(|m| m.call(inter, Vec::new()))
+                    .map(|m| m.call(inter, Vec::new(), loc))
             })
     }
 }
@@ -129,10 +131,10 @@ impl LoxCallable for Rc<Class> {
             .unwrap_or(0)
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
         let instance = ClassInstance::new(self).into();
         if let Some(method) = self.find_method(INIT_METHOD) {
-            Method::bind(method, &instance).call(inter, args)?;
+            Method::bind(method, &instance).call(inter, args, loc)?;
         }
 
         Ok(Value::Instance(instance))
@@ -154,16 +156,21 @@ impl ClassInstance {
         }
     }
 
-    pub fn get(inter: &mut Interpreter, instance: &InstanceRc, name: &str) -> Option<ValueRes> {
+    pub fn get(
+        inter: &mut Interpreter,
+        instance: &InstanceRc,
+        name: &str,
+        loc: Loc,
+    ) -> Option<ValueRes> {
         let field = { instance.borrow().fields.get(name).cloned().map(Ok) };
 
         field.or_else(|| {
             let class = Rc::clone(&instance.borrow().class);
-            class.get_and_bind(instance, inter, name)
+            class.get_and_bind(instance, inter, name, loc)
         })
     }
 
-    pub fn set(&mut self, name: &str, val: Value) {
+    pub fn set(&mut self, name: &str, val: Value, _loc: Loc) {
         self.fields.insert(String::from(name), val);
     }
 }
@@ -240,17 +247,17 @@ impl LoxCallable for BoundMethod {
         self.method.arity()
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>) -> ValueRes {
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
         match &self.method {
             Method::Native(native) => {
                 let fun = native.fun;
-                fun(inter, args, &mut self.instance.borrow_mut())
+                fun(inter, args, &mut self.instance.borrow_mut(), loc)
             }
             Method::Function(function) => {
                 let env = Environ::with_enclosing(&function.closure);
                 let this_val = Value::Instance(Rc::clone(&self.instance));
                 env.borrow_mut().define(this_val);
-                function.call_with_closure(inter, args, &Some(env))
+                function.call_with_closure(inter, args, loc, &Some(env))
             }
         }
     }
@@ -289,7 +296,7 @@ fn make_map_class() -> Class {
     class.add_native_method(NativeMethod {
         name: "count",
         arity: 0,
-        fun: |_inter, _args, instance| Ok(Value::Integer(instance.fields.len() as i64)),
+        fun: |_inter, _args, instance, _loc| Ok(Value::Integer(instance.fields.len() as i64)),
     });
 
     class
