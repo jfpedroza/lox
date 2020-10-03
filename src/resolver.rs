@@ -303,12 +303,29 @@ impl ExprVisitor<()> for Resolver<'_> {
     }
 
     fn visit_set_expr(&mut self, obj: &Expr, _name: &str, expr: &Expr, _loc: Loc) -> ResolveRes {
-        self.resolve_expr(expr)?;
-        self.resolve_expr(obj)
+        self.resolve_expr(obj)?;
+        self.resolve_expr(expr)
     }
 
     fn visit_array_expr(&mut self, elements: &[Expr], _loc: Loc) -> ResolveRes {
         self.resolve_exprs(elements)
+    }
+
+    fn visit_subscript_get_expr(&mut self, obj: &Expr, index: &Expr, _loc: Loc) -> ResolveRes {
+        self.resolve_expr(obj)?;
+        self.resolve_expr(index)
+    }
+
+    fn visit_subscript_set_expr(
+        &mut self,
+        obj: &Expr,
+        index: &Expr,
+        expr: &Expr,
+        _loc: Loc,
+    ) -> ResolveRes {
+        self.resolve_expr(obj)?;
+        self.resolve_expr(index)?;
+        self.resolve_expr(expr)
     }
 
     fn visit_this_expr(&mut self, loc: Loc) -> ResolveRes {

@@ -48,7 +48,7 @@ unary          → ( "!" | "-" | "++" | "--" ) unary
                | postfix ;
 postfix        → ( call "." )? IDENTIFIER ( "++" | "--" )
                | call
-call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER

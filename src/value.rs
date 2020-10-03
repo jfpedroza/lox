@@ -2,6 +2,7 @@ use crate::array::{Array, ArrayRc};
 use crate::callable::{Callable, LoxCallable};
 use crate::class::{Class, ClassInstance, InstanceRc};
 use crate::expr::LitExpr;
+use crate::scriptable::Scriptable;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
@@ -69,6 +70,13 @@ impl Value {
         match self {
             Value::Callable(Callable::Class(class)) => Some(class),
             _ => None,
+        }
+    }
+
+    pub fn into_scriptable(self) -> Result<Scriptable, Value> {
+        match self {
+            Value::Array(array) => Ok(Scriptable::Array(array)),
+            val => Err(val),
         }
     }
 }

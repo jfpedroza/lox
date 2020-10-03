@@ -170,6 +170,14 @@ impl Display for RuntimeError {
             IndexOutOfBounds(loc, index, size) => {
                 write!(f, "[{}] Index {} out of bounds. Size {}", loc, index, size)
             }
+            NotAScriptable(loc, val_type) => {
+                write!(f, "[{}] Type '{}' is not scriptable", loc, val_type)
+            }
+            ArrayIndexNotInteger(loc, val_type) => write!(
+                f,
+                "[{}] Array indices must be integers. Got '{}'",
+                loc, val_type
+            ),
         }
     }
 }

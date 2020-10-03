@@ -19,6 +19,8 @@ pub enum ExprKind {
     Get(Box<Expr>, String),
     Set(Box<Expr>, String, Box<Expr>),
     Array(Vec<Expr>),
+    SubscriptGet(Box<Expr>, Box<Expr>),
+    SubscriptSet(Box<Expr>, Box<Expr>, Box<Expr>),
     This,
     Super(String),
 }
@@ -70,6 +72,16 @@ pub trait Visitor<Res> {
     fn visit_set_expr(&mut self, obj: &Expr, name: &str, expr: &Expr, loc: Loc) -> Self::Result;
 
     fn visit_array_expr(&mut self, elements: &[Expr], loc: Loc) -> Self::Result;
+
+    fn visit_subscript_get_expr(&mut self, obj: &Expr, index: &Expr, loc: Loc) -> Self::Result;
+
+    fn visit_subscript_set_expr(
+        &mut self,
+        obj: &Expr,
+        index: &Expr,
+        expr: &Expr,
+        loc: Loc,
+    ) -> Self::Result;
 
     fn visit_this_expr(&mut self, loc: Loc) -> Self::Result;
 
@@ -155,6 +167,14 @@ impl Expr {
         Expr::new(ExprKind::Array(elements), loc)
     }
 
+    pub fn subscript_get(obj: Expr, index: Expr, loc: Loc) -> Self {
+        Expr::new(ExprKind::SubscriptGet(Box::new(obj), Box::new(index)), loc)
+    }
+
+    pub fn subscript_set(obj: Box<Expr>, index: Box<Expr>, expr: Expr, loc: Loc) -> Self {
+        Expr::new(ExprKind::SubscriptSet(obj, index, Box::new(expr)), loc)
+    }
+
     pub fn this(loc: Loc) -> Self {
         Expr::new(ExprKind::This, loc)
     }
@@ -183,6 +203,10 @@ impl Expr {
             Get(obj, name) => visitor.visit_get_expr(obj, name, self.loc),
             Set(obj, name, expr) => visitor.visit_set_expr(obj, name, expr, self.loc),
             Array(elements) => visitor.visit_array_expr(elements, self.loc),
+            SubscriptGet(obj, index) => visitor.visit_subscript_get_expr(obj, index, self.loc),
+            SubscriptSet(obj, index, expr) => {
+                visitor.visit_subscript_set_expr(obj, index, expr, self.loc)
+            }
             This => visitor.visit_this_expr(self.loc),
             Super(method) => visitor.visit_super_expr(method, self.loc),
         }
@@ -213,6 +237,8 @@ impl Debug for ExprKind {
             Get(obj, name) => format!("(get {:?} {})", obj, name),
             Set(obj, name, expr) => format!("(set {:?} {} {:?})", obj, name, expr),
             Array(elements) => format!("(array {:?})", elements),
+            SubscriptGet(obj, index) => format!("(s-get {:?} {:?})", obj, index),
+            SubscriptSet(obj, index, expr) => format!("(s-set {:?} {:?} {:?})", obj, index, expr),
             This => String::from("this"),
             Super(method) => format!("(super {})", method),
         };

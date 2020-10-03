@@ -7,6 +7,7 @@ use crate::class::{define_native_classes, Class, ClassInstance};
 use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
+use crate::scriptable::LoxScriptable;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
@@ -53,6 +54,8 @@ pub enum RuntimeError {
     SuperclassIsNotClass(Loc, String),
     ExpectedType(Loc, String, String),
     IndexOutOfBounds(Loc, i64, usize),
+    NotAScriptable(Loc, String),
+    ArrayIndexNotInteger(Loc, String),
 }
 
 #[derive(Debug)]
@@ -403,6 +406,35 @@ impl ExprVisitor<Value> for Interpreter {
         Ok(array.into())
     }
 
+    fn visit_subscript_get_expr(&mut self, obj: &Expr, index: &Expr, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        match obj.into_scriptable() {
+            Ok(scriptable) => {
+                let index = self.evaluate(index)?;
+                scriptable.subscript_get(index, loc)
+            }
+            Err(obj) => Err(RuntimeError::not_a_scriptable(loc, obj)),
+        }
+    }
+
+    fn visit_subscript_set_expr(
+        &mut self,
+        obj: &Expr,
+        index: &Expr,
+        expr: &Expr,
+        loc: Loc,
+    ) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        match obj.into_scriptable() {
+            Ok(mut scriptable) => {
+                let index = self.evaluate(index)?;
+                let val = self.evaluate(expr)?;
+                scriptable.subscript_set(index, val, loc)
+            }
+            Err(obj) => Err(RuntimeError::not_a_scriptable(loc, obj)),
+        }
+    }
+
     fn visit_this_expr(&mut self, loc: Loc) -> ValueRes {
         self.look_up_variable(THIS_KEYWORD, loc)
     }
@@ -735,6 +767,14 @@ impl RuntimeError {
 
     pub fn expected_type(loc: Loc, expected: &str, got: Value) -> Self {
         Self::ExpectedType(loc, String::from(expected), String::from(got.get_type()))
+    }
+
+    fn not_a_scriptable(loc: Loc, obj: Value) -> Self {
+        Self::NotAScriptable(loc, String::from(obj.get_type()))
+    }
+
+    pub fn array_index_not_int(loc: Loc, obj: Value) -> Self {
+        Self::ArrayIndexNotInteger(loc, String::from(obj.get_type()))
     }
 }
 

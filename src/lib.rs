@@ -18,6 +18,7 @@ mod lexer;
 mod location;
 mod parser;
 mod resolver;
+mod scriptable;
 mod stmt;
 #[cfg(test)]
 mod test_utils;

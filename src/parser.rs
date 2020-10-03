@@ -406,38 +406,53 @@ impl<'a> Parser<'a> {
     }
 
     fn make_assign_expr(&mut self, expr: Expr, op_token: &Token, value: Expr) -> ExprParseRes {
+        let expr_loc = expr.loc;
         Ok(if let ExprKind::Variable(name) = expr.kind {
-            let assign_value = match op_token.kind {
-                Equal => value,
-                PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
-                | PercentEqual => {
-                    let op = op_token.kind.into();
-                    Expr::binary(Expr::variable(&name, expr.loc), op, value, op_token.loc)
-                }
-                _ => unreachable!(),
-            };
+            let assign_value = Parser::assign_value(op_token, value, |value| {
+                let op = op_token.kind.into();
+                Expr::binary(Expr::variable(&name, expr_loc), op, value, op_token.loc)
+            });
 
             Expr::assign(name, assign_value, expr.loc)
         } else if let ExprKind::Get(obj, name) = expr.kind {
-            let assign_value = match op_token.kind {
-                Equal => value,
-                PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
-                | PercentEqual => {
-                    let op = op_token.kind.into();
-                    Expr::binary(
-                        Expr::get(*obj.clone(), &name, expr.loc),
-                        op,
-                        value,
-                        op_token.loc,
-                    )
-                }
-                _ => unreachable!(),
-            };
+            let assign_value = Parser::assign_value(op_token, value, |value| {
+                let op = op_token.kind.into();
+                Expr::binary(
+                    Expr::get(*obj.clone(), &name, expr_loc),
+                    op,
+                    value,
+                    op_token.loc,
+                )
+            });
 
             Expr::set(obj, name, assign_value, expr.loc)
+        } else if let ExprKind::SubscriptGet(obj, index) = expr.kind {
+            let assign_value = Parser::assign_value(op_token, value, |value| {
+                let op = op_token.kind.into();
+                Expr::binary(
+                    Expr::subscript_get(*obj.clone(), *index.clone(), expr_loc),
+                    op,
+                    value,
+                    op_token.loc,
+                )
+            });
+
+            Expr::subscript_set(obj, index, assign_value, expr.loc)
         } else {
             return Err(ParsingError::InvalidAssignmentTarget(expr.loc));
         })
+    }
+
+    fn assign_value<F>(op_token: &Token, value: Expr, not_equal_fn: F) -> Expr
+    where
+        F: FnOnce(Expr) -> Expr,
+    {
+        match op_token.kind {
+            Equal => value,
+            PlusEqual | PlusPlus | MinusEqual | MinusMinus | StarEqual | SlashEqual
+            | PercentEqual => not_equal_fn(value),
+            _ => unreachable!(),
+        }
     }
 
     fn conditional(&mut self) -> ExprParseRes {
@@ -539,6 +554,9 @@ impl<'a> Parser<'a> {
                     let name = match &left.kind {
                         ExprKind::Assign(name, _) => Expr::variable(name, left.loc),
                         ExprKind::Set(obj, name, _) => Expr::get(*obj.clone(), name, left.loc),
+                        ExprKind::SubscriptSet(obj, index, _) => {
+                            Expr::subscript_get(*obj.clone(), *index.clone(), left.loc)
+                        }
                         _ => unreachable!(),
                     };
                     (left, name)
@@ -573,6 +591,8 @@ impl<'a> Parser<'a> {
             } else if let Some(dot_token) = self.matches(&[Dot]) {
                 let name = self.consume(Identifier, |p| p.expected_name_error("property"))?;
                 Expr::get(expr, name.lexeme, dot_token.loc)
+            } else if self.matches(&[LeftBracket]).is_some() {
+                self.finish_subscript(expr)?
             } else {
                 break;
             }
@@ -600,6 +620,16 @@ impl<'a> Parser<'a> {
         let token = self.consume(RightParen, |p| p.expected_close_paren_error("arguments"))?;
 
         Ok(Expr::call(callee, args, token.loc))
+    }
+
+    fn finish_subscript(&mut self, obj: Expr) -> ExprParseRes {
+        let index = self.expression()?;
+
+        let token = self.consume(RightBracket, |p| {
+            p.expected_close_bracket_error("subscript index")
+        })?;
+
+        Ok(Expr::subscript_get(obj, index, token.loc))
     }
 
     fn primary(&mut self) -> ExprParseRes {
