@@ -62,11 +62,12 @@ impl Value {
         match self {
             Instance(instance) => Some(instance),
             Callable(callable) => callable.into_instance(),
+            Array(array) => Some(ClassInstance::from_array(array).into()),
             _ => None,
         }
     }
 
-    pub fn into_class(self) -> Option<Rc<Class>> {
+    pub fn into_class(self) -> Option<Class> {
         match self {
             Value::Callable(Callable::Class(class)) => Some(class),
             _ => None,

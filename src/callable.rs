@@ -1,4 +1,4 @@
-use crate::class::{BoundMethod, Class, InstanceRc};
+use crate::class::{BoundMethod, Class, InstanceRc, LoxClass};
 use crate::eval::{Env, Environ, GlobalEnviron, Interpreter, RuntimeInterrupt, ValueRes};
 use crate::location::Loc;
 use crate::stmt::Stmt;
@@ -12,7 +12,7 @@ pub enum Callable {
     Native(NativeFunction),
     Function(Rc<Function>),
     BoundMethod(BoundMethod),
-    Class(Rc<Class>),
+    Class(Class),
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -58,7 +58,7 @@ impl Callable {
 
     pub fn into_instance(self) -> Option<InstanceRc> {
         match self {
-            Callable::Class(class) => class.metainstance.as_ref().map(Rc::clone),
+            Callable::Class(class) => class.metainstance(),
             _ => None,
         }
     }
@@ -105,7 +105,7 @@ impl PartialEq for Callable {
             (Native(left), Native(right)) => left == right,
             (Function(left), Function(right)) => Rc::ptr_eq(left, right),
             (BoundMethod(left), BoundMethod(right)) => left == right,
-            (Class(left), Class(right)) => Rc::ptr_eq(left, right),
+            (Class(left), Class(right)) => left == right,
             (_, _) => false,
         }
     }
@@ -251,18 +251,6 @@ impl From<Function> for Callable {
 impl From<BoundMethod> for Callable {
     fn from(method: BoundMethod) -> Self {
         Callable::BoundMethod(method)
-    }
-}
-
-impl From<Class> for Callable {
-    fn from(class: Class) -> Self {
-        Callable::Class(Rc::new(class))
-    }
-}
-
-impl From<Rc<Class>> for Callable {
-    fn from(class: Rc<Class>) -> Self {
-        Callable::Class(class)
     }
 }
 

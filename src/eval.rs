@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests;
 
-use crate::array::Array;
+use crate::array::{Array, ArrayClass};
 use crate::callable::{define_native_functions, Function, LoxCallable};
-use crate::class::{define_native_classes, Class, ClassInstance};
+use crate::class::{define_native_classes, Class, ClassInstance, GenericClass, LoxClass};
 use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
@@ -18,6 +18,11 @@ pub struct Interpreter {
     env: Option<Env>,
     pub globals: GlobalEnv,
     locals: HashMap<(String, Loc), ResolvedLocal>,
+    pub natives: Natives,
+}
+
+pub struct Natives {
+    pub array_class: Rc<ArrayClass>,
 }
 
 #[derive(Debug)]
@@ -42,6 +47,7 @@ struct ResolvedLocal {
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
+    Generic(Loc, String),
     UnsupportedOperand(Loc, String, String),
     UnsupportedOperands(Loc, String, String, String),
     DivisionByZero(Loc),
@@ -75,10 +81,17 @@ impl Interpreter {
             env: None,
             globals,
             locals: HashMap::new(),
+            natives: Self::create_natives(),
         };
 
         inter.populate_globals();
         inter
+    }
+
+    fn create_natives() -> Natives {
+        Natives {
+            array_class: Rc::new(ArrayClass::new()),
+        }
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -167,8 +180,18 @@ impl Interpreter {
 
     fn populate_globals(&mut self) {
         let mut globals = self.globals.borrow_mut();
+        Self::define_class(&mut globals, &self.natives.array_class);
         define_native_classes(&mut globals);
         define_native_functions(&mut globals);
+    }
+
+    fn define_class<T>(globals: &mut GlobalEnviron, class: &Rc<T>)
+    where
+        Rc<T>: Into<Class>,
+    {
+        let class = Rc::clone(class).into();
+        let name = String::from(class.name());
+        globals.define(&name, class.into());
     }
 }
 
@@ -402,7 +425,7 @@ impl ExprVisitor<Value> for Interpreter {
             .map(|a| self.evaluate(a))
             .collect::<Result<_, _>>()?;
 
-        let array = Array::new(elements);
+        let array = Array::new(self, elements);
         Ok(array.into())
     }
 
@@ -557,7 +580,7 @@ impl StmtVisitor<()> for Interpreter {
 
         if let Some(sc) = &superclass {
             self.env = Some(Environ::with_enclosing(&self.env));
-            self.define(SUPER_KEYWORD, Rc::clone(sc).into());
+            self.define(SUPER_KEYWORD, sc.clone().into());
         }
 
         let mut methods = HashMap::new();
@@ -587,7 +610,7 @@ impl StmtVisitor<()> for Interpreter {
             self.env = self.enclosing_env();
         }
 
-        let class = Class::new(name, superclass, methods, getters, static_methods);
+        let class = GenericClass::new(name, superclass, methods, getters, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
@@ -724,6 +747,10 @@ impl Value {
 }
 
 impl RuntimeError {
+    pub fn generic(loc: Loc, message: &str) -> Self {
+        Self::Generic(loc, String::from(message))
+    }
+
     fn unsupported_operand(loc: Loc, op: &str, val: Value) -> Self {
         Self::UnsupportedOperand(loc, String::from(op), String::from(val.get_type()))
     }

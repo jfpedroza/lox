@@ -1,3 +1,4 @@
+use crate::array::{ArrayClass, ArrayRc};
 use crate::callable::{Callable, Function, LoxCallable};
 use crate::constants::INIT_METHOD;
 use crate::eval::{Environ, GlobalEnviron, Interpreter, ValueRes};
@@ -8,20 +9,42 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 
+#[derive(Clone, Debug)]
+pub enum Class {
+    Generic(Rc<GenericClass>),
+    Array(Rc<ArrayClass>),
+}
+
+pub type MethodMap = HashMap<String, Method>;
+
 #[derive(Debug)]
-pub struct Class {
+pub struct GenericClass {
     name: String,
-    superclass: Option<Rc<Class>>,
-    methods: HashMap<String, Method>,
-    getters: HashMap<String, Method>,
+    superclass: Option<Class>,
+    methods: MethodMap,
+    getters: MethodMap,
     is_meta: bool,
     pub metainstance: Option<InstanceRc>,
 }
 
+pub trait LoxClass: LoxCallable {
+    fn name(&self) -> &str;
+    fn superclass(&self) -> Option<&Class>;
+    fn methods(&self) -> &MethodMap;
+    fn getters(&self) -> &MethodMap;
+    fn metainstance(&self) -> Option<InstanceRc>;
+}
+
 #[derive(Debug)]
 pub struct ClassInstance {
-    class: Rc<Class>,
+    kind: InstanceKind,
     fields: HashMap<String, Value>,
+}
+
+#[derive(Debug)]
+enum InstanceKind {
+    Generic(Rc<GenericClass>),
+    Array(ArrayRc),
 }
 
 pub type InstanceRc = Rc<RefCell<ClassInstance>>;
@@ -33,10 +56,12 @@ pub enum Method {
 }
 
 pub struct NativeMethod {
-    name: &'static str,
-    arity: usize,
-    fun: fn(&mut Interpreter, Vec<Value>, &mut ClassInstance, Loc) -> ValueRes,
+    pub name: &'static str,
+    pub arity: usize,
+    pub fun: NativeMethodFn,
 }
+
+pub type NativeMethodFn = fn(&mut Interpreter, Vec<Value>, &mut ClassInstance, Loc) -> ValueRes;
 
 #[derive(Clone, Debug)]
 pub struct BoundMethod {
@@ -45,16 +70,185 @@ pub struct BoundMethod {
 }
 
 impl Class {
+    fn metaclass(&self) -> Option<Class> {
+        self.metainstance()
+            .as_ref()
+            .map(|inst| inst.borrow().class())
+    }
+
+    fn find_method(&self, name: &str) -> Option<Method> {
+        match self {
+            Class::Generic(class) => find_method(class, name),
+            Class::Array(class) => find_method(class, name),
+        }
+    }
+
+    fn find_getter(&self, name: &str) -> Option<Method> {
+        match self {
+            Class::Generic(class) => find_getter(class, name),
+            Class::Array(class) => find_getter(class, name),
+        }
+    }
+
+    pub fn get_and_bind(
+        &self,
+        instance: &InstanceRc,
+        inter: &mut Interpreter,
+        name: &str,
+        loc: Loc,
+    ) -> Option<ValueRes> {
+        match self {
+            Class::Generic(class) => get_and_bind(class, instance, inter, name, loc),
+            Class::Array(class) => get_and_bind(class, instance, inter, name, loc),
+        }
+    }
+
+    pub fn add_native_method(methods: &mut MethodMap, method: NativeMethod) {
+        let name = String::from(method.name);
+        methods.insert(name, method.into());
+    }
+
+    pub fn create_metainstance(
+        name: &str,
+        superclass: Option<&Class>,
+        static_methods: MethodMap,
+    ) -> InstanceRc {
+        let supermetaclass = superclass.and_then(|sc| sc.metaclass());
+        let metaclass = Rc::new(GenericClass::new_meta(name, supermetaclass, static_methods));
+        ClassInstance::new_generic(&metaclass).into()
+    }
+}
+
+impl LoxClass for Class {
+    fn name(&self) -> &str {
+        match self {
+            Class::Generic(class) => class.name(),
+            Class::Array(class) => class.name(),
+        }
+    }
+
+    fn superclass(&self) -> Option<&Class> {
+        match self {
+            Class::Generic(class) => class.superclass(),
+            Class::Array(class) => class.superclass(),
+        }
+    }
+
+    fn methods(&self) -> &MethodMap {
+        match self {
+            Class::Generic(class) => class.methods(),
+            Class::Array(class) => class.methods(),
+        }
+    }
+
+    fn getters(&self) -> &MethodMap {
+        match self {
+            Class::Generic(class) => class.getters(),
+            Class::Array(class) => class.getters(),
+        }
+    }
+
+    fn metainstance(&self) -> Option<InstanceRc> {
+        match self {
+            Class::Generic(class) => class.metainstance(),
+            Class::Array(class) => class.metainstance(),
+        }
+    }
+}
+
+impl LoxCallable for Class {
+    fn arity(&self) -> usize {
+        match self {
+            Class::Generic(class) => class.arity(),
+            Class::Array(class) => class.arity(),
+        }
+    }
+
+    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
+        match self {
+            Class::Generic(class) => class.call(inter, args, loc),
+            Class::Array(class) => class.call(inter, args, loc),
+        }
+    }
+}
+
+impl Display for Class {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Class::Generic(class) => Display::fmt(class, f),
+            Class::Array(class) => Display::fmt(class, f),
+        }
+    }
+}
+
+impl PartialEq for Class {
+    fn eq(&self, other: &Self) -> bool {
+        use Class::{Array, Generic};
+        match (self, other) {
+            (Generic(left), Generic(right)) => Rc::ptr_eq(left, right),
+            (Array(left), Array(right)) => Rc::ptr_eq(left, right),
+            (_, _) => false,
+        }
+    }
+}
+
+impl From<Class> for Callable {
+    fn from(class: Class) -> Self {
+        Callable::Class(class)
+    }
+}
+
+fn find_method<T>(class: &Rc<T>, name: &str) -> Option<Method>
+where
+    Rc<T>: LoxClass,
+{
+    class
+        .methods()
+        .get(name)
+        .cloned()
+        .or_else(|| class.superclass().and_then(|sc| sc.find_method(name)))
+}
+
+fn find_getter<T>(class: &Rc<T>, name: &str) -> Option<Method>
+where
+    Rc<T>: LoxClass,
+{
+    class
+        .getters()
+        .get(name)
+        .cloned()
+        .or_else(|| class.superclass().and_then(|sc| sc.find_getter(name)))
+}
+
+fn get_and_bind<T>(
+    class: &Rc<T>,
+    instance: &InstanceRc,
+    inter: &mut Interpreter,
+    name: &str,
+    loc: Loc,
+) -> Option<ValueRes>
+where
+    Rc<T>: LoxClass,
+{
+    find_method(class, name)
+        .map(|m| Method::bind(m, instance).into())
+        .map(Ok)
+        .or_else(|| {
+            find_getter(class, name)
+                .map(|m| Method::bind(m, instance))
+                .map(|m| m.call(inter, Vec::new(), loc))
+        })
+}
+
+impl GenericClass {
     pub fn new(
         name: &str,
-        superclass: Option<Rc<Class>>,
-        methods: HashMap<String, Method>,
-        getters: HashMap<String, Method>,
-        static_methods: HashMap<String, Method>,
+        superclass: Option<Class>,
+        methods: MethodMap,
+        getters: MethodMap,
+        static_methods: MethodMap,
     ) -> Self {
-        let supermetaclass = superclass.as_ref().and_then(|sc| sc.metaclass());
-        let metaclass = Rc::new(Self::new_meta(name, supermetaclass, static_methods));
-        let metainstance = ClassInstance::new(&metaclass).into();
+        let metainstance = Class::create_metainstance(name, superclass.as_ref(), static_methods);
 
         Self {
             name: String::from(name),
@@ -66,11 +260,7 @@ impl Class {
         }
     }
 
-    fn new_meta(
-        name: &str,
-        superclass: Option<Rc<Class>>,
-        methods: HashMap<String, Method>,
-    ) -> Self {
+    fn new_meta(name: &str, superclass: Option<Class>, methods: MethodMap) -> Self {
         Self {
             name: String::from(name),
             superclass,
@@ -81,59 +271,49 @@ impl Class {
         }
     }
 
-    fn metaclass(&self) -> Option<Rc<Class>> {
-        self.metainstance
-            .as_ref()
-            .map(|inst| Rc::clone(&inst.borrow().class))
-    }
-
-    fn add_native_method(&mut self, method: NativeMethod) {
-        let name = String::from(method.name);
-        self.methods.insert(name, method.into());
-    }
-
-    fn find_method(&self, name: &str) -> Option<Method> {
-        self.methods
-            .get(name)
-            .cloned()
-            .or_else(|| self.superclass.as_ref().and_then(|sc| sc.find_method(name)))
-    }
-
-    fn find_getter(&self, name: &str) -> Option<Method> {
-        self.getters
-            .get(name)
-            .cloned()
-            .or_else(|| self.superclass.as_ref().and_then(|sc| sc.find_getter(name)))
-    }
-
-    pub fn get_and_bind(
-        &self,
-        instance: &InstanceRc,
-        inter: &mut Interpreter,
-        name: &str,
-        loc: Loc,
-    ) -> Option<ValueRes> {
-        self.find_method(name)
-            .map(|m| Method::bind(m, instance).into())
-            .map(Ok)
-            .or_else(|| {
-                self.find_getter(name)
-                    .map(|m| Method::bind(m, instance))
-                    .map(|m| m.call(inter, Vec::new(), loc))
-            })
+    pub fn new_empty(name: &str, superclass: Option<Class>) -> Self {
+        Self::new(
+            name,
+            superclass,
+            HashMap::new(),
+            HashMap::new(),
+            HashMap::new(),
+        )
     }
 }
 
-impl LoxCallable for Rc<Class> {
+impl LoxClass for Rc<GenericClass> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn superclass(&self) -> Option<&Class> {
+        self.superclass.as_ref()
+    }
+
+    fn methods(&self) -> &MethodMap {
+        &self.methods
+    }
+
+    fn getters(&self) -> &MethodMap {
+        &self.getters
+    }
+
+    fn metainstance(&self) -> Option<InstanceRc> {
+        self.metainstance.as_ref().map(Rc::clone)
+    }
+}
+
+impl LoxCallable for Rc<GenericClass> {
     fn arity(&self) -> usize {
-        self.find_method(INIT_METHOD)
+        find_method(self, INIT_METHOD)
             .map(|m| m.arity())
             .unwrap_or(0)
     }
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
-        let instance = ClassInstance::new(self).into();
-        if let Some(method) = self.find_method(INIT_METHOD) {
+        let instance = ClassInstance::new_generic(self).into();
+        if let Some(method) = find_method(self, INIT_METHOD) {
             Method::bind(method, &instance).call(inter, args, loc)?;
         }
 
@@ -141,7 +321,25 @@ impl LoxCallable for Rc<Class> {
     }
 }
 
-impl Display for Class {
+impl From<GenericClass> for Callable {
+    fn from(class: GenericClass) -> Self {
+        Callable::from(Rc::new(class))
+    }
+}
+
+impl From<Rc<GenericClass>> for Callable {
+    fn from(class: Rc<GenericClass>) -> Self {
+        Callable::Class(Class::from(class))
+    }
+}
+
+impl From<Rc<GenericClass>> for Class {
+    fn from(class: Rc<GenericClass>) -> Self {
+        Class::Generic(class)
+    }
+}
+
+impl Display for GenericClass {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let class = if self.is_meta { "metaclass" } else { "class" };
         write!(f, "<{} {}>", class, self.name)
@@ -149,10 +347,41 @@ impl Display for Class {
 }
 
 impl ClassInstance {
-    pub fn new(class: &Rc<Class>) -> Self {
+    pub fn new_generic(class: &Rc<GenericClass>) -> Self {
         Self {
-            class: Rc::clone(class),
+            kind: InstanceKind::Generic(Rc::clone(class)),
             fields: HashMap::new(),
+        }
+    }
+
+    pub fn from_array(array: ArrayRc) -> Self {
+        Self {
+            kind: InstanceKind::Array(array),
+            fields: HashMap::new(),
+        }
+    }
+
+    pub fn array(&self) -> Option<ArrayRc> {
+        use InstanceKind::*;
+        match &self.kind {
+            Generic(_class) => None,
+            Array(array) => Some(Rc::clone(&array)),
+        }
+    }
+
+    pub fn class(&self) -> Class {
+        use InstanceKind::*;
+        match &self.kind {
+            Generic(class) => Rc::clone(class).into(),
+            Array(array) => array.borrow().class().into(),
+        }
+    }
+
+    pub fn class_name(&self) -> &str {
+        use InstanceKind::*;
+        match &self.kind {
+            Generic(class) => &class.name,
+            Array(array) => array.borrow().class_name(),
         }
     }
 
@@ -165,7 +394,7 @@ impl ClassInstance {
         let field = { instance.borrow().fields.get(name).cloned().map(Ok) };
 
         field.or_else(|| {
-            let class = Rc::clone(&instance.borrow().class);
+            let class = instance.borrow().class();
             class.get_and_bind(instance, inter, name, loc)
         })
     }
@@ -177,7 +406,7 @@ impl ClassInstance {
 
 impl Display for ClassInstance {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "<instance of {}>", self.class.name)
+        write!(f, "<instance of {}>", self.class_name())
     }
 }
 
@@ -270,7 +499,8 @@ impl Display for BoundMethod {
             Method::Function(function) => function.name.as_ref().unwrap(),
         };
 
-        let class_name = &self.instance.borrow().class.name;
+        let instance = self.instance.borrow();
+        let class_name = instance.class_name();
         write!(f, "<method {} of class {}>", method_name, class_name)
     }
 }
@@ -286,18 +516,21 @@ pub fn define_native_classes(globals: &mut GlobalEnviron) {
 }
 
 fn define_class(globals: &mut GlobalEnviron, class: Class) {
-    let name = class.name.clone();
-    globals.define(&name, Rc::new(class).into());
+    let name = String::from(class.name());
+    globals.define(&name, class.into());
 }
 
 fn make_map_class() -> Class {
-    let mut class = Class::new("Map", None, HashMap::new(), HashMap::new(), HashMap::new());
+    let mut class = GenericClass::new_empty("Map", None);
 
-    class.add_native_method(NativeMethod {
-        name: "count",
-        arity: 0,
-        fun: |_inter, _args, instance, _loc| Ok(Value::Integer(instance.fields.len() as i64)),
-    });
+    Class::add_native_method(
+        &mut class.methods,
+        NativeMethod {
+            name: "count",
+            arity: 0,
+            fun: |_inter, _args, instance, _loc| Ok(Value::Integer(instance.fields.len() as i64)),
+        },
+    );
 
-    class
+    Class::Generic(Rc::new(class))
 }

@@ -132,6 +132,7 @@ impl Display for RuntimeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use RuntimeError::*;
         match self {
+            Generic(loc, message) => write!(f, "[{}] {}", loc, message),
             UnsupportedOperand(loc, op, val_type) => write!(
                 f,
                 "[{}] Unsupported operand for {}: '{}'",
