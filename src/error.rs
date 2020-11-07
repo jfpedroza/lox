@@ -42,8 +42,11 @@ fn is_syntax_err(err: &Error) -> bool {
 fn error_type(err: &Error) -> &'static str {
     if is_syntax_err(err) {
         "SyntaxError"
-    } else if is_type::<RuntimeError>(err) {
-        "RuntimeError"
+    } else if let Some(err) = err.downcast_ref::<RuntimeError>() {
+        match err {
+            RuntimeError::ExpectedType(_, _, _) => "TypeError",
+            _ => "RuntimeError",
+        }
     } else {
         "Error"
     }
@@ -95,6 +98,9 @@ impl Display for ParsingError {
             ExpectedCloseBrace(loc, after, got) => {
                 write!(f, "[{}] Expected '}}' after {}. Got {}", loc, after, got)
             }
+            ExpectedCloseBracket(loc, after, got) => {
+                write!(f, "[{}] Expected ']' after {}. Got {}", loc, after, got)
+            }
             ExpectedColon(loc, got) => write!(
                 f,
                 "[{}] Expected ':' for conditional expression. Got {}",
@@ -126,6 +132,7 @@ impl Display for RuntimeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         use RuntimeError::*;
         match self {
+            Generic(loc, message) => write!(f, "[{}] {}", loc, message),
             UnsupportedOperand(loc, op, val_type) => write!(
                 f,
                 "[{}] Unsupported operand for {}: '{}'",
@@ -153,9 +160,23 @@ impl Display for RuntimeError {
             NoFields(loc, val_type) => {
                 write!(f, "[{}] Type '{}' doesn't have fields", loc, val_type)
             }
+            ExpectedType(loc, expected, got) => {
+                write!(f, "[{}] Expected type '{}'. Got '{}'", loc, expected, got)
+            }
             SuperclassIsNotClass(loc, val_type) => write!(
                 f,
                 "[{}] Superclass must be a class. Got '{}'",
+                loc, val_type
+            ),
+            IndexOutOfBounds(loc, index, size) => {
+                write!(f, "[{}] Index {} out of bounds. Size {}", loc, index, size)
+            }
+            NotAScriptable(loc, val_type) => {
+                write!(f, "[{}] Type '{}' is not scriptable", loc, val_type)
+            }
+            ArrayIndexNotInteger(loc, val_type) => write!(
+                f,
+                "[{}] Array indices must be integers. Got '{}'",
                 loc, val_type
             ),
         }

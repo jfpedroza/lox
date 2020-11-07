@@ -48,7 +48,7 @@ unary          → ( "!" | "-" | "++" | "--" ) unary
                | postfix ;
 postfix        → ( call "." )? IDENTIFIER ( "++" | "--" )
                | call
-call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )* ;
 primary        → "false" | "true" | "nil"
                | NUMBER | STRING
                | IDENTIFIER
@@ -56,8 +56,10 @@ primary        → "false" | "true" | "nil"
                | "super" "." IDENTIFIER
                | anonymous_fun
                | "(" expression ")"
+               | "[" array_elements? "]"
 
 anonymous_fun  → "fun" "(" parameters? ")" block ;
 
 assignment_op  → "=" | "+=" | "-=" | "*=" | "/=" | "%=" ;
 arguments      → assignment ( "," assignment )* ;
+array_elements → assignment ( "," assignment )* ;
