@@ -1,5 +1,8 @@
-use crate::callable::{Callable, Class, ClassInstance, InstanceRc, LoxCallable};
+use crate::array::{Array, ArrayRc};
+use crate::callable::{Callable, LoxCallable};
+use crate::class::{Class, ClassInstance, InstanceRc};
 use crate::expr::LitExpr;
+use crate::scriptable::Scriptable;
 use std::cell::RefCell;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
@@ -13,6 +16,7 @@ pub enum Value {
     Nil,
     Callable(Callable),
     Instance(InstanceRc),
+    Array(ArrayRc),
 }
 
 pub mod types {
@@ -22,15 +26,13 @@ pub mod types {
     pub const BOOL: &str = "bool";
     pub const NIL: &str = "nil";
     pub const INSTANCE: &str = "instance";
+    pub const ARRAY: &str = "array";
 }
 
 impl Value {
     pub fn is_truthy(&self) -> bool {
         use Value::*;
-        match self {
-            Nil | Boolean(false) => false,
-            _ => true,
-        }
+        !matches!(self, Nil | Boolean(false))
     }
 
     pub fn number(&self) -> Option<f64> {
@@ -51,6 +53,7 @@ impl Value {
             Nil => types::NIL,
             Callable(callable) => callable.get_type(),
             Instance(_) => types::INSTANCE,
+            Array(_) => types::ARRAY,
         }
     }
 
@@ -59,14 +62,22 @@ impl Value {
         match self {
             Instance(instance) => Some(instance),
             Callable(callable) => callable.into_instance(),
+            Array(array) => Some(ClassInstance::from_array(array).into()),
             _ => None,
         }
     }
 
-    pub fn into_class(self) -> Option<Rc<Class>> {
+    pub fn into_class(self) -> Option<Class> {
         match self {
             Value::Callable(Callable::Class(class)) => Some(class),
             _ => None,
+        }
+    }
+
+    pub fn into_scriptable(self) -> Result<Scriptable, Value> {
+        match self {
+            Value::Array(array) => Ok(Scriptable::Array(array)),
+            val => Err(val),
         }
     }
 }
@@ -126,6 +137,12 @@ impl From<ClassInstance> for Value {
     }
 }
 
+impl From<Array> for Value {
+    fn from(input: Array) -> Self {
+        Value::Array(Rc::new(RefCell::new(input)))
+    }
+}
+
 impl<T: Into<Value>> From<Option<T>> for Value {
     fn from(input: Option<T>) -> Self {
         match input {
@@ -146,6 +163,7 @@ impl Display for Value {
             Nil => write!(f, "nil"),
             Callable(callable) => callable.fmt(f),
             Instance(instance) => instance.borrow().fmt(f),
+            Array(array) => array.borrow().fmt(f),
         }
     }
 }
@@ -160,7 +178,7 @@ impl PartialEq for Value {
             (Boolean(left), Boolean(right)) => left == right,
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
-            (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
+            (Array(left), Array(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         }
     }

@@ -1,10 +1,13 @@
 #[cfg(test)]
 mod tests;
 
-use crate::callable::{populate_globals, Class, ClassInstance, Function, LoxCallable};
+use crate::array::{Array, ArrayClass};
+use crate::callable::{define_native_functions, Function, LoxCallable};
+use crate::class::{define_native_classes, Class, ClassInstance, GenericClass, LoxClass};
 use crate::constants::{INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD};
 use crate::expr::{BinOp, Expr, LitExpr, LogOp, Param, UnOp, Visitor as ExprVisitor};
 use crate::location::Loc;
+use crate::scriptable::LoxScriptable;
 use crate::stmt::{FunctionKind, Stmt, StmtKind, Visitor as StmtVisitor};
 use crate::value::Value;
 use std::cell::RefCell;
@@ -15,6 +18,11 @@ pub struct Interpreter {
     env: Option<Env>,
     pub globals: GlobalEnv,
     locals: HashMap<(String, Loc), ResolvedLocal>,
+    pub natives: Natives,
+}
+
+pub struct Natives {
+    pub array_class: Rc<ArrayClass>,
 }
 
 #[derive(Debug)]
@@ -39,6 +47,7 @@ struct ResolvedLocal {
 
 #[derive(Debug, PartialEq, Fail)]
 pub enum RuntimeError {
+    Generic(Loc, String),
     UnsupportedOperand(Loc, String, String),
     UnsupportedOperands(Loc, String, String, String),
     DivisionByZero(Loc),
@@ -49,6 +58,10 @@ pub enum RuntimeError {
     UndefinedProperty(Loc, String),
     NoFields(Loc, String),
     SuperclassIsNotClass(Loc, String),
+    ExpectedType(Loc, String, String),
+    IndexOutOfBounds(Loc, i64, usize),
+    NotAScriptable(Loc, String),
+    ArrayIndexNotInteger(Loc, String),
 }
 
 #[derive(Debug)]
@@ -68,10 +81,17 @@ impl Interpreter {
             env: None,
             globals,
             locals: HashMap::new(),
+            natives: Self::create_natives(),
         };
 
-        populate_globals(&mut inter);
+        inter.populate_globals();
         inter
+    }
+
+    fn create_natives() -> Natives {
+        Natives {
+            array_class: Rc::new(ArrayClass::new()),
+        }
     }
 
     pub fn interpret(&mut self, stmts: &[Stmt]) -> Result<(), RuntimeError> {
@@ -156,6 +176,22 @@ impl Interpreter {
         self.env
             .as_ref()
             .and_then(|env| env.borrow().enclosing.as_ref().map(Rc::clone))
+    }
+
+    fn populate_globals(&mut self) {
+        let mut globals = self.globals.borrow_mut();
+        Self::define_class(&mut globals, &self.natives.array_class);
+        define_native_classes(&mut globals);
+        define_native_functions(&mut globals);
+    }
+
+    fn define_class<T>(globals: &mut GlobalEnviron, class: &Rc<T>)
+    where
+        Rc<T>: Into<Class>,
+    {
+        let class = Rc::clone(class).into();
+        let name = String::from(class.name());
+        globals.define(&name, class.into());
     }
 }
 
@@ -347,7 +383,7 @@ impl ExprVisitor<Value> for Interpreter {
 
         if let Value::Callable(callable) = callee {
             if args.len() == callable.arity() {
-                callable.call(self, args)
+                callable.call(self, args, loc)
             } else {
                 Err(RuntimeError::mismatching_arity(
                     loc,
@@ -364,7 +400,7 @@ impl ExprVisitor<Value> for Interpreter {
         let obj = self.evaluate(obj)?;
         let val_type = obj.get_type();
         if let Some(instance) = obj.into_instance() {
-            ClassInstance::get(self, &instance, name)
+            ClassInstance::get(self, &instance, name, loc)
                 .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, name)))
         } else {
             Err(RuntimeError::no_properties(loc, val_type))
@@ -376,10 +412,49 @@ impl ExprVisitor<Value> for Interpreter {
         let val_type = obj.get_type();
         if let Some(instance) = obj.into_instance() {
             let val = self.evaluate(expr)?;
-            instance.borrow_mut().set(name, val.clone());
+            instance.borrow_mut().set(name, val.clone(), loc);
             Ok(val)
         } else {
             Err(RuntimeError::no_fields(loc, val_type))
+        }
+    }
+
+    fn visit_array_expr(&mut self, elements: &[Expr], _loc: Loc) -> ValueRes {
+        let elements: Vec<_> = elements
+            .iter()
+            .map(|a| self.evaluate(a))
+            .collect::<Result<_, _>>()?;
+
+        let array = Array::new(self, elements);
+        Ok(array.into())
+    }
+
+    fn visit_subscript_get_expr(&mut self, obj: &Expr, index: &Expr, loc: Loc) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        match obj.into_scriptable() {
+            Ok(scriptable) => {
+                let index = self.evaluate(index)?;
+                scriptable.subscript_get(index, loc)
+            }
+            Err(obj) => Err(RuntimeError::not_a_scriptable(loc, obj)),
+        }
+    }
+
+    fn visit_subscript_set_expr(
+        &mut self,
+        obj: &Expr,
+        index: &Expr,
+        expr: &Expr,
+        loc: Loc,
+    ) -> ValueRes {
+        let obj = self.evaluate(obj)?;
+        match obj.into_scriptable() {
+            Ok(mut scriptable) => {
+                let index = self.evaluate(index)?;
+                let val = self.evaluate(expr)?;
+                scriptable.subscript_set(index, val, loc)
+            }
+            Err(obj) => Err(RuntimeError::not_a_scriptable(loc, obj)),
         }
     }
 
@@ -393,7 +468,7 @@ impl ExprVisitor<Value> for Interpreter {
         let obj_val = self.look_up_variable(THIS_KEYWORD, loc)?;
         let obj = obj_val.into_instance().unwrap();
         superclass
-            .get_and_bind(&obj, self, method)
+            .get_and_bind(&obj, self, method, loc)
             .unwrap_or_else(|| Err(RuntimeError::undefined_property(loc, method)))
     }
 }
@@ -505,7 +580,7 @@ impl StmtVisitor<()> for Interpreter {
 
         if let Some(sc) = &superclass {
             self.env = Some(Environ::with_enclosing(&self.env));
-            self.define(SUPER_KEYWORD, Rc::clone(sc).into());
+            self.define(SUPER_KEYWORD, sc.clone().into());
         }
 
         let mut methods = HashMap::new();
@@ -535,7 +610,7 @@ impl StmtVisitor<()> for Interpreter {
             self.env = self.enclosing_env();
         }
 
-        let class = Class::new(name, superclass, methods, getters, static_methods);
+        let class = GenericClass::new(name, superclass, methods, getters, static_methods);
         self.assign(name, Value::Callable(class.into()), loc)?;
         Ok(())
     }
@@ -645,6 +720,7 @@ impl Value {
             (Nil, Nil) => true,
             (Callable(left), Callable(right)) => left == right,
             (Instance(left), Instance(right)) => Rc::ptr_eq(left, right),
+            (Array(left), Array(right)) => Rc::ptr_eq(left, right),
             (_, _) => false,
         })
     }
@@ -671,6 +747,10 @@ impl Value {
 }
 
 impl RuntimeError {
+    pub fn generic(loc: Loc, message: &str) -> Self {
+        Self::Generic(loc, String::from(message))
+    }
+
     fn unsupported_operand(loc: Loc, op: &str, val: Value) -> Self {
         Self::UnsupportedOperand(loc, String::from(op), String::from(val.get_type()))
     }
@@ -710,6 +790,18 @@ impl RuntimeError {
 
     fn superclass_is_not_class(loc: Loc, val_type: &str) -> Self {
         Self::SuperclassIsNotClass(loc, String::from(val_type))
+    }
+
+    pub fn expected_type(loc: Loc, expected: &str, got: Value) -> Self {
+        Self::ExpectedType(loc, String::from(expected), String::from(got.get_type()))
+    }
+
+    fn not_a_scriptable(loc: Loc, obj: Value) -> Self {
+        Self::NotAScriptable(loc, String::from(obj.get_type()))
+    }
+
+    pub fn array_index_not_int(loc: Loc, obj: Value) -> Self {
+        Self::ArrayIndexNotInteger(loc, String::from(obj.get_type()))
     }
 }
 
