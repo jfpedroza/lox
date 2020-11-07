@@ -2,10 +2,8 @@
 mod tests;
 
 use crate::expr::{BinOp, Expr, ExprKind, Param};
-use crate::lexer::{
-    Token,
-    TokenKind::{self, *},
-};
+use crate::lexer::Token;
+use crate::lexer::TokenKind::{self, *};
 use crate::location::Loc;
 use crate::stmt::{FunctionKind, Stmt};
 

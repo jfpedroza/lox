@@ -881,6 +881,101 @@ fn test_class_inheritance_method_shadowing() {
 }
 
 #[test]
+fn test_array_creation() {
+    let input = r#"
+    var arr = [1, 2, 3];
+    var len = arr.length;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "len"));
+}
+
+#[test]
+fn test_array_get() {
+    let input = r#"
+    var arr = [1, 2, 3];
+    var x = arr[1];
+    var y = arr.get(2);
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(2.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(3.into()), env_get(&inter, "y"));
+}
+
+#[test]
+fn test_array_set() {
+    let input = r#"
+    var arr = [1, 2, 3];
+    arr[1] = 10;
+    arr.set(0, "string");
+    var x = arr[1];
+    var y = arr.get(0);
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(10.into()), env_get(&inter, "x"));
+    assert_eq!(Ok("string".into()), env_get(&inter, "y"));
+}
+
+#[test]
+fn test_array_push() {
+    let input = r#"
+    var arr = [1, 2, 3];
+    arr.push(4);
+    var x = arr[3];
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(4.into()), env_get(&inter, "x"));
+}
+
+#[test]
+fn test_array_pop() {
+    let input = r#"
+    var arr = [1, 2, 3];
+    arr.pop();
+    var len = arr.length;
+    var x = arr[0];
+    var y = arr[1];
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(2.into()), env_get(&inter, "len"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(2.into()), env_get(&inter, "y"));
+}
+
+#[test]
+fn test_array_constructor() {
+    let input = r#"
+    var arr = Array(3, 1);
+    var len = arr.length;
+    var x = arr[0];
+    var y = arr[1];
+    var z = arr[2];
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(3.into()), env_get(&inter, "len"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "y"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "z"));
+}
+
+#[test]
+fn test_array_new() {
+    let input = r#"
+    var arr = Array.new();
+    var len = arr.length;
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(0.into()), env_get(&inter, "len"));
+}
+
+#[test]
 fn test_undefined_variable() {
     let input = r#"hello;"#;
     let (stmts, mut inter) = get_stmts(input);
