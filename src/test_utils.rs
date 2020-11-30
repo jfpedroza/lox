@@ -169,27 +169,22 @@ pub fn print_stmt(expr: Expr, (line, col): (usize, usize)) -> Stmt {
 }
 
 pub fn while_stmt(cond: Expr, body: Stmt, (line, col): (usize, usize)) -> Stmt {
-    Stmt::while_stmt(cond, body, Loc::new(line, col))
+    Stmt::for_stmt(cond, None, body, Loc::new(line, col))
 }
 
 pub fn for_stmt(
     init: Option<Stmt>,
     cond: Expr,
     increment: Option<Expr>,
-    mut body: Stmt,
+    body: Stmt,
     (line, col): (usize, usize),
 ) -> Stmt {
-    if let Some(inc_expr) = increment {
-        let body_loc = body.loc;
-        body = Stmt::block(vec![body, inc_expr.into()], body_loc);
-    }
-
-    let while_stmt = Stmt::while_stmt(cond, body, Loc::new(line, col));
+    let for_stmt = Stmt::for_stmt(cond, increment, body, Loc::new(line, col));
     if let Some(init_stmt) = init {
         let init_loc = init_stmt.loc;
-        Stmt::block(vec![init_stmt, while_stmt], init_loc)
+        Stmt::block(vec![init_stmt, for_stmt], init_loc)
     } else {
-        while_stmt
+        for_stmt
     }
 }
 

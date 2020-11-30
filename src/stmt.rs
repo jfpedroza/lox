@@ -6,7 +6,7 @@ pub enum StmtKind {
     Expression(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
-    While(Expr, Box<Stmt>),
+    For(Expr, Option<Expr>, Box<Stmt>),
     Var(String, Option<Expr>),
     Block(Vec<Stmt>),
     Function(String, Vec<Param>, Vec<Stmt>, FunctionKind),
@@ -41,7 +41,13 @@ pub trait Visitor<Res> {
 
     fn visit_print_stmt(&mut self, expr: &Expr, loc: Loc) -> Self::Result;
 
-    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, loc: Loc) -> Self::Result;
+    fn visit_for_stmt(
+        &mut self,
+        cond: &Expr,
+        inc: &Option<Expr>,
+        body: &Stmt,
+        loc: Loc,
+    ) -> Self::Result;
 
     fn visit_var_stmt(&mut self, name: &str, init: &Option<Expr>, loc: Loc) -> Self::Result;
 
@@ -85,8 +91,8 @@ impl Stmt {
         Stmt::new(StmtKind::Print(expr), loc)
     }
 
-    pub fn while_stmt(cond: Expr, body: Stmt, loc: Loc) -> Self {
-        Stmt::new(StmtKind::While(cond, Box::new(body)), loc)
+    pub fn for_stmt(cond: Expr, inc: Option<Expr>, body: Stmt, loc: Loc) -> Self {
+        Stmt::new(StmtKind::For(cond, inc, Box::new(body)), loc)
     }
 
     pub fn var(name: &str, init: Option<Expr>, loc: Loc) -> Self {
@@ -136,7 +142,7 @@ impl Stmt {
                 visitor.visit_if_stmt(cond, then_branch, else_branch, self.loc)
             }
             Print(expr) => visitor.visit_print_stmt(expr, self.loc),
-            While(expr, body) => visitor.visit_while_stmt(expr, body, self.loc),
+            For(expr, inc, body) => visitor.visit_for_stmt(expr, inc, body, self.loc),
             Var(name, init) => visitor.visit_var_stmt(name, init, self.loc),
             Block(stmts) => visitor.visit_block_stmt(stmts, self.loc),
             Function(name, params, body, kind) => {

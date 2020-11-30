@@ -504,10 +504,20 @@ impl StmtVisitor<()> for Interpreter {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ExecuteRes {
+    fn visit_for_stmt(
+        &mut self,
+        cond: &Expr,
+        inc: &Option<Expr>,
+        body: &Stmt,
+        _loc: Loc,
+    ) -> ExecuteRes {
         while self.evaluate(cond)?.is_truthy() {
             match self.execute(body) {
-                Ok(()) => (),
+                Ok(()) => {
+                    if let Some(inc_expr) = inc {
+                        self.evaluate(inc_expr)?;
+                    }
+                }
                 Err(RuntimeInterrupt::Break) => break,
                 Err(interrupt) => {
                     return Err(interrupt);

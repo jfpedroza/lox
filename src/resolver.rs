@@ -391,10 +391,19 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.resolve_expr(expr)
     }
 
-    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ResolveRes {
+    fn visit_for_stmt(
+        &mut self,
+        cond: &Expr,
+        inc: &Option<Expr>,
+        body: &Stmt,
+        _loc: Loc,
+    ) -> ResolveRes {
         let enclosing_loop = self.in_loop;
         self.in_loop = true;
         self.resolve_expr(cond)?;
+        if let Some(inc_expr) = inc {
+            self.resolve_expr(inc_expr)?;
+        }
         self.resolve_stmt(body)?;
         self.in_loop = enclosing_loop;
         Ok(())
