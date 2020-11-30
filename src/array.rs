@@ -1,14 +1,14 @@
 use crate::callable::{Callable, LoxCallable};
-use crate::class::{Class, InstanceRc, LoxClass, MethodMap, NativeMethod, NativeMethodFn};
+use crate::class::{Class, InstanceRc, LoxClass, MethodMap, NativeMethod};
 use crate::constants::ARRAY_CLASS;
 use crate::eval::{Interpreter, RuntimeError, ValueRes};
 use crate::location::Loc;
 use crate::value::{types::INT, Value};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
 use std::slice::Iter;
+use uuid::Uuid;
 
 #[derive(Debug)]
 pub struct Array {
@@ -84,61 +84,9 @@ impl Display for Array {
     }
 }
 
-pub mod functions {
-    use super::*;
-    use crate::eval::Interpreter;
-    use crate::value::types::{ARRAY, INT};
-
-    fn validate_array(val: Value, loc: Loc) -> Result<ArrayRc, RuntimeError> {
-        if let Value::Array(array) = val {
-            Ok(array)
-        } else {
-            Err(RuntimeError::expected_type(loc, ARRAY, val))
-        }
-    }
-
-    pub fn array_len(_inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
-        let arg = args.pop().unwrap();
-        let array = validate_array(arg, loc)?;
-        let len = array.borrow().len();
-        Ok(Value::Integer(len as i64))
-    }
-
-    pub fn array_push(_inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
-        let val = args.pop().unwrap();
-        let arg = args.pop().unwrap();
-        let array = validate_array(arg, loc)?;
-        array.borrow_mut().push(val);
-        Ok(Value::Nil)
-    }
-
-    pub fn array_get(_inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
-        let index = args.pop().unwrap();
-        let arg = args.pop().unwrap();
-        let array = validate_array(arg, loc)?;
-        if let Value::Integer(index) = index {
-            array.borrow().get(index, loc)
-        } else {
-            Err(RuntimeError::expected_type(loc, INT, index))
-        }
-    }
-
-    pub fn array_set(_inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
-        let val = args.pop().unwrap();
-        let index = args.pop().unwrap();
-        let arg = args.pop().unwrap();
-        let array = validate_array(arg, loc)?;
-        if let Value::Integer(index) = index {
-            array.borrow_mut().set(index, val.clone(), loc)?;
-            Ok(val)
-        } else {
-            Err(RuntimeError::expected_type(loc, INT, index))
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct ArrayClass {
+    uuid: Uuid,
     methods: MethodMap,
     getters: MethodMap,
     metainstance: InstanceRc,
@@ -146,91 +94,101 @@ pub struct ArrayClass {
 
 impl ArrayClass {
     pub fn new() -> Self {
+        let uuid = Uuid::new_v4();
         let mut static_methods = MethodMap::new();
         Self::add_new_smethod(&mut static_methods);
-        let metainstance = Class::create_metainstance(ARRAY_CLASS, None, static_methods);
 
-        let mut class = Self {
-            methods: HashMap::new(),
-            getters: HashMap::new(),
+        let mut getters = MethodMap::new();
+        Self::add_length_getter(&mut getters);
+        let mut methods = MethodMap::new();
+        Self::add_push_method(&mut methods);
+        Self::add_pop_method(&mut methods);
+        Self::add_get_method(&mut methods);
+        Self::add_set_method(&mut methods);
+
+        let metainstance =
+            Class::create_metainstance(ARRAY_CLASS, uuid, None, static_methods, &methods, &getters);
+
+        Self {
+            uuid,
+            methods,
+            getters,
             metainstance,
-        };
-
-        class.add_length_getter();
-        class.add_push_method();
-        class.add_pop_method();
-        class.add_get_method();
-        class.add_set_method();
-        class
+        }
     }
 
-    fn add_method(&mut self, name: &'static str, arity: usize, fun: NativeMethodFn) {
-        Class::add_native_method(&mut self.methods, NativeMethod { name, arity, fun })
+    fn add_length_getter(getters: &mut MethodMap) {
+        Class::add_native_method(
+            getters,
+            NativeMethod::new("length", 0, |_inter, _args, instance, _loc| {
+                let array = instance.array().unwrap();
+                let len = array.borrow().len();
+                Ok(Value::Integer(len as i64))
+            }),
+        )
     }
 
-    fn add_getter(&mut self, name: &'static str, arity: usize, fun: NativeMethodFn) {
-        Class::add_native_method(&mut self.getters, NativeMethod { name, arity, fun })
+    fn add_push_method(methods: &mut MethodMap) {
+        Class::add_native_method(
+            methods,
+            NativeMethod::new("push", 1, |_inter, mut args: Vec<Value>, instance, _loc| {
+                let array = instance.array().unwrap();
+                let val = args.pop().unwrap();
+                array.borrow_mut().push(val);
+                Ok(Value::Nil)
+            }),
+        );
     }
 
-    fn add_length_getter(&mut self) {
-        self.add_getter("length", 0, |_inter, _args, instance, _loc| {
-            let array = instance.array().unwrap();
-            let len = array.borrow().len();
-            Ok(Value::Integer(len as i64))
-        })
-    }
-
-    fn add_push_method(&mut self) {
-        self.add_method("push", 1, |_inter, mut args: Vec<Value>, instance, _loc| {
-            let array = instance.array().unwrap();
-            let val = args.pop().unwrap();
-            array.borrow_mut().push(val);
-            Ok(Value::Nil)
-        })
-    }
-
-    fn add_pop_method(&mut self) {
-        self.add_method("pop", 0, |_inter, _args, instance, _loc| {
-            let array = instance.array().unwrap();
-            let val = array.borrow_mut().pop()?;
-            Ok(val)
-        })
-    }
-
-    fn add_get_method(&mut self) {
-        self.add_method("get", 1, |_inter, mut args: Vec<Value>, instance, loc| {
-            let array = instance.array().unwrap();
-            let index = args.pop().unwrap();
-            if let Value::Integer(index) = index {
-                array.borrow().get(index, loc)
-            } else {
-                Err(RuntimeError::expected_type(loc, INT, index))
-            }
-        })
-    }
-
-    fn add_set_method(&mut self) {
-        self.add_method("set", 2, |_inter, mut args: Vec<Value>, instance, loc| {
-            let array = instance.array().unwrap();
-            let val = args.pop().unwrap();
-            let index = args.pop().unwrap();
-            if let Value::Integer(index) = index {
-                array.borrow_mut().set(index, val.clone(), loc)?;
+    fn add_pop_method(methods: &mut MethodMap) {
+        Class::add_native_method(
+            methods,
+            NativeMethod::new("pop", 0, |_inter, _args, instance, _loc| {
+                let array = instance.array().unwrap();
+                let val = array.borrow_mut().pop()?;
                 Ok(val)
-            } else {
-                Err(RuntimeError::expected_type(loc, INT, index))
-            }
-        })
+            }),
+        )
+    }
+
+    fn add_get_method(methods: &mut MethodMap) {
+        Class::add_native_method(
+            methods,
+            NativeMethod::new("get", 1, |_inter, mut args: Vec<Value>, instance, loc| {
+                let array = instance.array().unwrap();
+                let index = args.pop().unwrap();
+                if let Value::Integer(index) = index {
+                    array.borrow().get(index, loc)
+                } else {
+                    Err(RuntimeError::expected_type(loc, INT, index))
+                }
+            }),
+        )
+    }
+
+    fn add_set_method(methods: &mut MethodMap) {
+        Class::add_native_method(
+            methods,
+            NativeMethod::new("set", 2, |_inter, mut args: Vec<Value>, instance, loc| {
+                let array = instance.array().unwrap();
+                let val = args.pop().unwrap();
+                let index = args.pop().unwrap();
+                if let Value::Integer(index) = index {
+                    array.borrow_mut().set(index, val.clone(), loc)?;
+                    Ok(val)
+                } else {
+                    Err(RuntimeError::expected_type(loc, INT, index))
+                }
+            }),
+        )
     }
 
     fn add_new_smethod(static_methods: &mut MethodMap) {
         Class::add_native_method(
             static_methods,
-            NativeMethod {
-                name: "new",
-                arity: 0,
-                fun: |inter, _args, _instance, _loc| Ok(Array::new(inter, vec![]).into()),
-            },
+            NativeMethod::new("new", 0, |inter, _args, _instance, _loc| {
+                Ok(Array::new(inter, vec![]).into())
+            }),
         )
     }
 }
@@ -238,6 +196,10 @@ impl ArrayClass {
 impl LoxClass for Rc<ArrayClass> {
     fn name(&self) -> &str {
         ARRAY_CLASS
+    }
+
+    fn uuid(&self) -> Uuid {
+        self.uuid
     }
 
     fn superclass(&self) -> Option<&Class> {

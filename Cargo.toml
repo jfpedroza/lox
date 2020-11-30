@@ -1,6 +1,6 @@
 [package]
 name = "lox"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Jhon Pedroza <jhon@pedroza.me>"]
 edition = "2018"
 
@@ -11,3 +11,4 @@ failure = "0.1.8"
 failure_derive = "0.1.8"
 rustyline = "6.2.0"
 ansi_term = "0.12"
+uuid = { version = "0.8", features = ["v4"] }

@@ -1,13 +1,14 @@
 use crate::array::{ArrayClass, ArrayRc};
 use crate::callable::{Callable, Function, LoxCallable};
 use crate::constants::INIT_METHOD;
-use crate::eval::{Environ, GlobalEnviron, Interpreter, ValueRes};
+use crate::eval::{Environ, GlobalEnviron, Interpreter, RuntimeError, ValueRes};
 use crate::location::Loc;
 use crate::value::Value;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::rc::Rc;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub enum Class {
@@ -20,6 +21,7 @@ pub type MethodMap = HashMap<String, Method>;
 #[derive(Debug)]
 pub struct GenericClass {
     name: String,
+    uuid: Uuid,
     superclass: Option<Class>,
     methods: MethodMap,
     getters: MethodMap,
@@ -29,6 +31,7 @@ pub struct GenericClass {
 
 pub trait LoxClass: LoxCallable {
     fn name(&self) -> &str;
+    fn uuid(&self) -> Uuid;
     fn superclass(&self) -> Option<&Class>;
     fn methods(&self) -> &MethodMap;
     fn getters(&self) -> &MethodMap;
@@ -53,6 +56,7 @@ pub type InstanceRc = Rc<RefCell<ClassInstance>>;
 pub enum Method {
     Native(Rc<NativeMethod>),
     Function(Rc<Function>),
+    StaticWrapper(Rc<StaticWrapper>),
 }
 
 pub struct NativeMethod {
@@ -62,6 +66,13 @@ pub struct NativeMethod {
 }
 
 pub type NativeMethodFn = fn(&mut Interpreter, Vec<Value>, &mut ClassInstance, Loc) -> ValueRes;
+
+#[derive(Debug)]
+pub struct StaticWrapper {
+    wrapped: Method,
+    class_uuid: Uuid,
+    class_name: String,
+}
 
 #[derive(Clone, Debug)]
 pub struct BoundMethod {
@@ -110,12 +121,31 @@ impl Class {
 
     pub fn create_metainstance(
         name: &str,
+        class_uuid: Uuid,
         superclass: Option<&Class>,
-        static_methods: MethodMap,
+        mut static_methods: MethodMap,
+        methods: &MethodMap,
+        getters: &MethodMap,
     ) -> InstanceRc {
+        let static_wrappers = methods
+            .iter()
+            .chain(getters.iter())
+            .map(|entry| Self::create_static_method(entry, class_uuid, name));
+        static_methods.extend(static_wrappers);
+
         let supermetaclass = superclass.and_then(|sc| sc.metaclass());
         let metaclass = Rc::new(GenericClass::new_meta(name, supermetaclass, static_methods));
         ClassInstance::new_generic(&metaclass).into()
+    }
+
+    fn create_static_method(
+        (name, method): (&String, &Method),
+        class_uuid: Uuid,
+        class_name: &str,
+    ) -> (String, Method) {
+        let name = String::from(name);
+        let wrapper = StaticWrapper::new(method, class_uuid, class_name);
+        (name, wrapper.into())
     }
 }
 
@@ -124,6 +154,13 @@ impl LoxClass for Class {
         match self {
             Class::Generic(class) => class.name(),
             Class::Array(class) => class.name(),
+        }
+    }
+
+    fn uuid(&self) -> Uuid {
+        match self {
+            Class::Generic(class) => class.uuid(),
+            Class::Array(class) => class.uuid(),
         }
     }
 
@@ -248,10 +285,19 @@ impl GenericClass {
         getters: MethodMap,
         static_methods: MethodMap,
     ) -> Self {
-        let metainstance = Class::create_metainstance(name, superclass.as_ref(), static_methods);
+        let uuid = Uuid::new_v4();
+        let metainstance = Class::create_metainstance(
+            name,
+            uuid,
+            superclass.as_ref(),
+            static_methods,
+            &methods,
+            &getters,
+        );
 
         Self {
             name: String::from(name),
+            uuid,
             superclass,
             methods,
             getters,
@@ -261,8 +307,10 @@ impl GenericClass {
     }
 
     fn new_meta(name: &str, superclass: Option<Class>, methods: MethodMap) -> Self {
+        let uuid = Uuid::new_v4();
         Self {
             name: String::from(name),
+            uuid,
             superclass,
             methods,
             getters: HashMap::new(),
@@ -285,6 +333,10 @@ impl GenericClass {
 impl LoxClass for Rc<GenericClass> {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn uuid(&self) -> Uuid {
+        self.uuid
     }
 
     fn superclass(&self) -> Option<&Class> {
@@ -431,6 +483,15 @@ impl Method {
         match self {
             Method::Native(native) => native.arity,
             Method::Function(function) => function.arity(),
+            Method::StaticWrapper(wrapper) => wrapper.arity(),
+        }
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            Method::Native(native) => native.name,
+            Method::Function(function) => function.name.as_ref().unwrap(),
+            Method::StaticWrapper(wrapper) => wrapper.name(),
         }
     }
 
@@ -462,6 +523,40 @@ impl From<Function> for Method {
     }
 }
 
+impl From<StaticWrapper> for Method {
+    fn from(wrapper: StaticWrapper) -> Self {
+        Method::StaticWrapper(Rc::new(wrapper))
+    }
+}
+
+impl NativeMethod {
+    pub fn new(name: &'static str, arity: usize, fun: NativeMethodFn) -> Self {
+        Self { name, arity, fun }
+    }
+}
+
+impl StaticWrapper {
+    pub fn new(method: &Method, class_uuid: Uuid, class_name: &str) -> Self {
+        Self {
+            wrapped: method.clone(),
+            class_uuid,
+            class_name: String::from(class_name),
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        self.wrapped.arity() + 1
+    }
+
+    pub fn name(&self) -> &str {
+        self.wrapped.name()
+    }
+
+    fn bind(&self, instance: &InstanceRc) -> Callable {
+        Method::bind(self.wrapped.clone(), instance)
+    }
+}
+
 impl BoundMethod {
     pub fn new(method: Method, instance: &InstanceRc) -> Self {
         Self {
@@ -476,7 +571,7 @@ impl LoxCallable for BoundMethod {
         self.method.arity()
     }
 
-    fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
+    fn call(&self, inter: &mut Interpreter, mut args: Vec<Value>, loc: Loc) -> ValueRes {
         match &self.method {
             Method::Native(native) => {
                 let fun = native.fun;
@@ -488,17 +583,28 @@ impl LoxCallable for BoundMethod {
                 env.borrow_mut().define(this_val);
                 function.call_with_closure(inter, args, loc, &Some(env))
             }
+            Method::StaticWrapper(wrapper) => {
+                let first_arg = args.remove(0);
+                let val_type = first_arg.get_type();
+                match first_arg.into_instance() {
+                    Some(instance) if instance.borrow().class().uuid() == wrapper.class_uuid => {
+                        let bound = wrapper.bind(&instance);
+                        bound.call(inter, args, loc)
+                    }
+                    Some(_) | None => Err(RuntimeError::ExpectedType(
+                        loc,
+                        wrapper.class_name.clone(),
+                        String::from(val_type),
+                    )),
+                }
+            }
         }
     }
 }
 
 impl Display for BoundMethod {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let method_name = match &self.method {
-            Method::Native(native) => native.name,
-            Method::Function(function) => function.name.as_ref().unwrap(),
-        };
-
+        let method_name = self.method.name();
         let instance = self.instance.borrow();
         let class_name = instance.class_name();
         write!(f, "<method {} of class {}>", method_name, class_name)

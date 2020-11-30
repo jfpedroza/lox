@@ -220,6 +220,16 @@ impl<'a> Resolver<'a> {
 
         Ok(())
     }
+
+    fn function_kind_to_type(kind: FunctionKind, method_name: &str) -> FunctionType {
+        use FunctionKind::*;
+        match kind {
+            Function => FunctionType::Function,
+            Method if method_name == INIT_METHOD => FunctionType::Initializer,
+            Method | Getter => FunctionType::Method,
+            StaticMethod => FunctionType::StaticMethod,
+        }
+    }
 }
 
 impl ExprVisitor<()> for Resolver<'_> {
@@ -445,7 +455,6 @@ impl StmtVisitor<()> for Resolver<'_> {
         methods: &[Stmt],
         loc: Loc,
     ) -> ResolveRes {
-        use FunctionKind::*;
         let enclosing_class = self.current_class;
         self.current_class = ClassType::Class;
 
@@ -474,18 +483,11 @@ impl StmtVisitor<()> for Resolver<'_> {
         self.declare_define_special(THIS_KEYWORD, loc);
 
         let mut method_names = Vec::new();
-        let mut static_method_names = Vec::new();
 
         for method in methods {
             match &method.kind {
-                StmtKind::Function(method_name, params, body, kind)
-                    if [Method, Getter].contains(kind) =>
-                {
-                    let declaration = if kind == &Method && method_name == INIT_METHOD {
-                        FunctionType::Initializer
-                    } else {
-                        FunctionType::Method
-                    };
+                StmtKind::Function(method_name, params, body, kind) => {
+                    let declaration = Resolver::function_kind_to_type(*kind, method_name);
 
                     self.resolve_function(params, body, declaration)?;
 
@@ -498,20 +500,6 @@ impl StmtVisitor<()> for Resolver<'_> {
                         ));
                     } else {
                         method_names.push(String::from(method_name));
-                    }
-                }
-                StmtKind::Function(method_name, params, body, StaticMethod) => {
-                    self.resolve_function(params, body, FunctionType::StaticMethod)?;
-
-                    if static_method_names.contains(method_name) {
-                        self.errors.push(ResolutionError::duplicate_method(
-                            method.loc,
-                            name,
-                            "a static method",
-                            method_name,
-                        ));
-                    } else {
-                        static_method_names.push(String::from(method_name));
                     }
                 }
                 _ => unreachable!(),

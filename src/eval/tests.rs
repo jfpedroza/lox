@@ -881,6 +881,32 @@ fn test_class_inheritance_method_shadowing() {
 }
 
 #[test]
+fn test_class_static_wrappers() {
+    let input = r#"
+    class A {
+        method(param) {
+            this.data = param;
+            return param;
+        }
+
+        getter { return this.data; }
+    }
+
+    var a = A();
+    var x = a.method(1);
+    var x2 = a.getter;
+    var y = A.method(a, 2);
+    var y2 = A.getter(a);
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x"));
+    assert_eq!(Ok(1.into()), env_get(&inter, "x2"));
+    assert_eq!(Ok(2.into()), env_get(&inter, "y"));
+    assert_eq!(Ok(2.into()), env_get(&inter, "y2"));
+}
+
+#[test]
 fn test_array_creation() {
     let input = r#"
     var arr = [1, 2, 3];
@@ -976,6 +1002,22 @@ fn test_array_new() {
 }
 
 #[test]
+fn test_array_static_wrappers() {
+    let input = r#"
+    var arr = [];
+    Array.push(arr, 1);
+    Array.push(arr, 2);
+    Array.set(arr, 0, Array.get(arr, 1) + 3);
+    var len = Array.length(arr);
+    var x = arr[0];
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(2.into()), env_get(&inter, "len"));
+    assert_eq!(Ok(5.into()), env_get(&inter, "x"));
+}
+
+#[test]
 fn test_undefined_variable() {
     let input = r#"hello;"#;
     let (stmts, mut inter) = get_stmts(input);
@@ -1035,6 +1077,16 @@ fn test_too_many_arguments() {
 }
 
 #[test]
+fn test_mismatching_arity_static_wrapper() {
+    let input = r#"Array.push(1);"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::MismatchingArity(Loc::new(0, 12), 2, 1)),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
 fn test_no_properties() {
     let input = r#"1.field;"#;
     let (stmts, mut inter) = get_stmts(input);
@@ -1085,6 +1137,28 @@ fn test_superclass_is_not_class() {
         Err(RuntimeError::SuperclassIsNotClass(
             Loc::new(2, 14),
             String::from(STRING)
+        )),
+        inter.interpret(&stmts)
+    );
+}
+
+#[test]
+fn test_incorrect_type_in_static_wrapper() {
+    let input = r#"
+    class A {
+        method(param) {
+            print param;
+        }
+    }
+
+    A.method(3, "the param");
+    "#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(
+        Err(RuntimeError::ExpectedType(
+            Loc::new(7, 27),
+            String::from("A"),
+            String::from(INT)
         )),
         inter.interpret(&stmts)
     );

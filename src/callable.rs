@@ -19,10 +19,6 @@ pub enum Callable {
 pub enum NativeFunction {
     Clock,
     Str,
-    ArrayLen,
-    ArrayPush,
-    ArrayGet,
-    ArraySet,
 }
 
 #[derive(Debug)]
@@ -117,10 +113,6 @@ impl NativeFunction {
         match self {
             Clock => "clock",
             Str => "str",
-            ArrayLen => "array_len",
-            ArrayPush => "array_push",
-            ArrayGet => "array_get",
-            ArraySet => "array_set",
         }
     }
 }
@@ -131,23 +123,14 @@ impl LoxCallable for NativeFunction {
         match self {
             Clock => 0,
             Str => 1,
-            ArrayLen => 1,
-            ArrayPush => 2,
-            ArrayGet => 2,
-            ArraySet => 3,
         }
     }
 
     fn call(&self, inter: &mut Interpreter, args: Vec<Value>, loc: Loc) -> ValueRes {
-        use crate::array::functions::*;
         use NativeFunction::*;
         match self {
             Clock => clock(inter, args, loc),
             Str => val_to_str(inter, args, loc),
-            ArrayLen => array_len(inter, args, loc),
-            ArrayPush => array_push(inter, args, loc),
-            ArrayGet => array_get(inter, args, loc),
-            ArraySet => array_set(inter, args, loc),
         }
     }
 }
@@ -257,10 +240,6 @@ impl From<BoundMethod> for Callable {
 pub fn define_native_functions(globals: &mut GlobalEnviron) {
     define_native(globals, NativeFunction::Clock);
     define_native(globals, NativeFunction::Str);
-    define_native(globals, NativeFunction::ArrayLen);
-    define_native(globals, NativeFunction::ArrayPush);
-    define_native(globals, NativeFunction::ArrayGet);
-    define_native(globals, NativeFunction::ArraySet);
 }
 
 fn define_native(globals: &mut GlobalEnviron, function: NativeFunction) {
