@@ -71,15 +71,31 @@ fn test_duplicate_method_getter() {
 #[test]
 fn test_duplicate_static_method() {
     let input = r#"class MyClass {
-        method() { /* This shouldn't give an error */ }
+        method() {}
+        class method() {}
+    }"#;
+    assert_eq!(
+        Err(ResolutionError::DuplicateMethod(
+            Loc::new(2, 14),
+            String::from("MyClass"),
+            String::from("a method"),
+            String::from("method")
+        )),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_duplicate_static_method2() {
+    let input = r#"class MyClass {
         class method() {}
         class method(name) {}
     }"#;
     assert_eq!(
         Err(ResolutionError::DuplicateMethod(
-            Loc::new(3, 14),
+            Loc::new(2, 14),
             String::from("MyClass"),
-            String::from("a static method"),
+            String::from("a method"),
             String::from("method")
         )),
         resolve(input)

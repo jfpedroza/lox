@@ -11,3 +11,4 @@ failure = "0.1.8"
 failure_derive = "0.1.8"
 rustyline = "6.2.0"
 ansi_term = "0.12"
+uuid = { version = "0.8", features = ["v4"] }
