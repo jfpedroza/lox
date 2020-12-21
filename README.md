@@ -12,6 +12,7 @@
 - Supports conditional operator ( `cond ? then : else` )
 - Handles division by zero
 - Supports `break` statements
+- Supports `continue` statements
 - Supports anonymous functions ( `fun() {}` )
 - Supports arithmentic assignment operators ( `+=`, `-=`, `*=`, `/=`, `%=` )
 - Supports prefix and postfix increment and decrement operators ( `++`, `--` )

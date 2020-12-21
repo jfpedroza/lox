@@ -161,6 +161,9 @@ impl<'a> Parser<'a> {
         } else if let Some(token) = self.matches(&[Break]) {
             self.consume(Semicolon, |p| p.expected_semicolon_error("'break'"))?;
             Ok(Stmt::break_stmt(token.loc))
+        } else if let Some(token) = self.matches(&[Continue]) {
+            self.consume(Semicolon, |p| p.expected_semicolon_error("'continue'"))?;
+            Ok(Stmt::continue_stmt(token.loc))
         } else {
             self.expression_statement()
         }
@@ -198,7 +201,7 @@ impl<'a> Parser<'a> {
 
         let body = self.statement()?;
 
-        Ok(Stmt::while_stmt(cond, body, *loc))
+        Ok(Stmt::for_stmt(cond, None, body, *loc))
     }
 
     fn for_statement(&mut self) -> StmtParseRes {
@@ -229,19 +232,14 @@ impl<'a> Parser<'a> {
 
         self.consume(RightParen, |p| p.expected_close_paren_error("for clauses"))?;
 
-        let mut body = self.statement()?;
+        let body = self.statement()?;
 
-        if let Some(inc_expr) = increment {
-            let body_loc = body.loc;
-            body = Stmt::block(vec![body, inc_expr.into()], body_loc);
-        }
-
-        let while_stmt = Stmt::while_stmt(cond, body, *loc);
+        let for_stmt = Stmt::for_stmt(cond, increment, body, *loc);
         Ok(if let Some(init_stmt) = init {
             let init_loc = init_stmt.loc;
-            Stmt::block(vec![init_stmt, while_stmt], init_loc)
+            Stmt::block(vec![init_stmt, for_stmt], init_loc)
         } else {
-            while_stmt
+            for_stmt
         })
     }
 
