@@ -57,6 +57,7 @@ pub enum ResolutionError {
     SuperOutsideClass(Loc),
     SuperNoInSubclass(Loc),
     BreakOutsideLoop(Loc),
+    ContinueOutsideLoop(Loc),
     Multiple(Vec<ResolutionError>),
 }
 
@@ -531,6 +532,14 @@ impl StmtVisitor<()> for Resolver<'_> {
     fn visit_break_stmt(&mut self, loc: Loc) -> ResolveRes {
         if !self.in_loop {
             self.errors.push(ResolutionError::BreakOutsideLoop(loc));
+        }
+
+        Ok(())
+    }
+
+    fn visit_continue_stmt(&mut self, loc: Loc) -> ResolveRes {
+        if !self.in_loop {
+            self.errors.push(ResolutionError::ContinueOutsideLoop(loc));
         }
 
         Ok(())

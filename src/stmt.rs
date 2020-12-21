@@ -13,6 +13,7 @@ pub enum StmtKind {
     Return(Option<Expr>),
     Class(String, Option<Expr>, Vec<Stmt>),
     Break,
+    Continue,
 }
 
 pub type Stmt = Located<StmtKind>;
@@ -73,6 +74,7 @@ pub trait Visitor<Res> {
     ) -> Self::Result;
 
     fn visit_break_stmt(&mut self, loc: Loc) -> Self::Result;
+    fn visit_continue_stmt(&mut self, loc: Loc) -> Self::Result;
 }
 
 impl Stmt {
@@ -131,6 +133,10 @@ impl Stmt {
         Stmt::new(StmtKind::Break, loc)
     }
 
+    pub fn continue_stmt(loc: Loc) -> Self {
+        Stmt::new(StmtKind::Continue, loc)
+    }
+
     pub fn accept<Vis, Res, Error>(&self, visitor: &mut Vis) -> Vis::Result
     where
         Vis: Visitor<Res, Error = Error>,
@@ -153,6 +159,7 @@ impl Stmt {
                 visitor.visit_class_stmt(name, superclass, methods, self.loc)
             }
             Break => visitor.visit_break_stmt(self.loc),
+            Continue => visitor.visit_continue_stmt(self.loc),
         }
     }
 }

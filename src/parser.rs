@@ -161,6 +161,9 @@ impl<'a> Parser<'a> {
         } else if let Some(token) = self.matches(&[Break]) {
             self.consume(Semicolon, |p| p.expected_semicolon_error("'break'"))?;
             Ok(Stmt::break_stmt(token.loc))
+        } else if let Some(token) = self.matches(&[Continue]) {
+            self.consume(Semicolon, |p| p.expected_semicolon_error("'continue'"))?;
+            Ok(Stmt::continue_stmt(token.loc))
         } else {
             self.expression_statement()
         }

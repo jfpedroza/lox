@@ -226,6 +226,45 @@ fn test_break_in_anon_fun() {
 }
 
 #[test]
+fn test_continue_outside_loop() {
+    let input = r#"continue;"#;
+    assert_eq!(
+        Err(ResolutionError::ContinueOutsideLoop(Loc::new(0, 0))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_continue_in_fun() {
+    let input = r#"
+    while(true) {
+        fun local_fun() {
+            continue;
+        }
+    }
+    "#;
+    assert_eq!(
+        Err(ResolutionError::ContinueOutsideLoop(Loc::new(3, 12))),
+        resolve(input)
+    )
+}
+
+#[test]
+fn test_continue_in_anon_fun() {
+    let input = r#"
+    while(true) {
+        var local_fun = fun() {
+            continue;
+        };
+    }
+    "#;
+    assert_eq!(
+        Err(ResolutionError::ContinueOutsideLoop(Loc::new(3, 12))),
+        resolve(input)
+    )
+}
+
+#[test]
 fn test_multiple() {
     let input = r#"return; break;"#;
     assert_eq!(

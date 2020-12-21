@@ -225,6 +225,9 @@ impl Display for ResolutionError {
                 loc
             ),
             BreakOutsideLoop(loc) => write!(f, "[{}] Cannot use 'break' outside of a loop", loc),
+            ContinueOutsideLoop(loc) => {
+                write!(f, "[{}] Cannot use 'continue' outside of a loop", loc)
+            }
             Multiple(errors) => {
                 let error_string: String =
                     errors.iter().map(|error| format!("\n{}", error)).collect();
