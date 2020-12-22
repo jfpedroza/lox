@@ -69,6 +69,7 @@ pub enum RuntimeInterrupt {
     Error(RuntimeError),
     Return(Value),
     Break,
+    Continue,
 }
 
 pub type ValueRes = Result<Value, RuntimeError>;
@@ -504,10 +505,20 @@ impl StmtVisitor<()> for Interpreter {
         Ok(())
     }
 
-    fn visit_while_stmt(&mut self, cond: &Expr, body: &Stmt, _loc: Loc) -> ExecuteRes {
+    fn visit_for_stmt(
+        &mut self,
+        cond: &Expr,
+        inc: &Option<Expr>,
+        body: &Stmt,
+        _loc: Loc,
+    ) -> ExecuteRes {
         while self.evaluate(cond)?.is_truthy() {
             match self.execute(body) {
-                Ok(()) => (),
+                Ok(()) | Err(RuntimeInterrupt::Continue) => {
+                    if let Some(inc_expr) = inc {
+                        self.evaluate(inc_expr)?;
+                    }
+                }
                 Err(RuntimeInterrupt::Break) => break,
                 Err(interrupt) => {
                     return Err(interrupt);
@@ -617,6 +628,10 @@ impl StmtVisitor<()> for Interpreter {
 
     fn visit_break_stmt(&mut self, _loc: Loc) -> ExecuteRes {
         Err(RuntimeInterrupt::Break)
+    }
+
+    fn visit_continue_stmt(&mut self, _loc: Loc) -> ExecuteRes {
+        Err(RuntimeInterrupt::Continue)
     }
 }
 

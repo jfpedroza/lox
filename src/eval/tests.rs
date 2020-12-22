@@ -517,7 +517,19 @@ fn test_for_stmt() {
 }
 
 #[test]
-fn test_for_break_stmt() {
+fn test_for_break_while_stmt() {
+    let input = r#"var i = 10;
+    while (true) {
+        if (i == 0) break;
+        --i;
+    }"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok(0.into()), env_get(&inter, "i"));
+}
+
+#[test]
+fn test_for_break_for_stmt() {
     let input = r#"var i;
     for (i = 10; ; --i) {
         if (i == 0) break;
@@ -525,6 +537,36 @@ fn test_for_break_stmt() {
     let (stmts, mut inter) = get_stmts(input);
     assert_eq!(Ok(()), inter.interpret(&stmts));
     assert_eq!(Ok(0.into()), env_get(&inter, "i"));
+}
+
+#[test]
+fn test_for_continue_while_stmt() {
+    let input = r#"var evens = "";
+    var i = 0;
+    while (i < 10) {
+        if (i % 2 == 1) {
+            i++;
+            continue;
+        }
+
+        evens += str(i);
+        i++;
+    }"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("02468".into()), env_get(&inter, "evens"));
+}
+
+#[test]
+fn test_for_continue_for_stmt() {
+    let input = r#"var evens = "";
+    for (var i = 0; i < 10; i++) {
+        if (i % 2 == 1) continue;
+        evens += str(i);
+    }"#;
+    let (stmts, mut inter) = get_stmts(input);
+    assert_eq!(Ok(()), inter.interpret(&stmts));
+    assert_eq!(Ok("02468".into()), env_get(&inter, "evens"));
 }
 
 #[test]
